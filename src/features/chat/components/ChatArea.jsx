@@ -1,17 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Paperclip, Smile, Send, Phone, Video, Search, MessageSquare } from "lucide-react";
+import { useChat } from "../hooks/useChat";
 
-
-// Testeando frontend con mensajes mockeados, luego se conectará con el backend
-const MOCK_MESSAGES = [
-  { id: 1, sender: "OrionTheProgrammer", content: "Oye ya terminaste el conversation-service?", time: "12:20", mine: false },
-  { id: 2, sender: "Tu", content: "Casi, me falta la infraestructura", time: "12:21", mine: true },
-  { id: 3, sender: "OrionTheProgrammer", content: "Dale, yo voy con el user-service", time: "12:22", mine: false },
-  { id: 4, sender: "Tu", content: "Ok perfecto, lo vemos mañana entonces", time: "12:34", mine: true },
-];
-
-export default function ChatArea({ conversation }) {
+export default function ChatArea({ conversation, isMobile, onBack }) {
   const [message, setMessage] = useState("");
+  const { messages, loading, sendMessage, fetchMessages } = useChat(conversation?.id);
+
+  useEffect(() => {
+    if (conversation?.id) {
+      fetchMessages();
+    }
+  }, [conversation?.id, fetchMessages]);
 
   if (!conversation) {
     return (
@@ -25,10 +24,14 @@ export default function ChatArea({ conversation }) {
     );
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!message.trim()) return;
-    console.log("Enviar:", message);
-    setMessage("");
+    try {
+      await sendMessage(message);
+      setMessage("");
+    } catch (err) {
+      console.error("Error al enviar mensaje:", err);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -48,8 +51,18 @@ export default function ChatArea({ conversation }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0d0e14", minWidth: 0 }}>
 
       {/* Header */}
-      <div style={{ padding: "0 20px", height: 60, flexShrink: 0, borderBottom: "1px solid #1e2030", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0d0e14" }}>
+      <div style={{ padding: isMobile ? "0 16px 0 56px" : "0 20px", height: 60, flexShrink: 0, borderBottom: "1px solid #1e2030", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0d0e14" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {isMobile && (
+            <button
+              onClick={onBack}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#c0caf5", padding: 4, marginRight: 4, display: "flex", alignItems: "center" }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
+          )}
           <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, fontWeight: 600 }}>
             {conversation.avatar || conversation.name[0]}
           </div>
@@ -77,19 +90,32 @@ export default function ChatArea({ conversation }) {
 
       {/* Mensajes */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: 4 }}>
-        {MOCK_MESSAGES.map(msg => (
-          <MessageBubble key={msg.id} msg={msg} />
-        ))}
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <span style={{ color: "#565f89" }}>Cargando mensajes...</span>
+          </div>
+        ) : messages.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <span style={{ color: "#565f89" }}>No hay mensajes aún</span>
+          </div>
+        ) : (
+          messages.map(msg => (
+            <MessageBubble key={msg.id} msg={msg} />
+          ))
+        )}
       </div>
 
       {/* Input */}
-      <div style={{ padding: "12px 16px", borderTop: "1px solid #1e2030" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, background: "#13141c", border: "1px solid #1e2030", borderRadius: 14, padding: "8px 8px 8px 16px" }}>
+      <div style={{ padding: "16px 20px", borderTop: "1px solid #1e2030", background: "#0d0e14" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#13141c", border: "1px solid #1e2030", borderRadius: 16, padding: "10px 14px", transition: "border-color 0.2s" }}
+             onFocus={(e) => e.currentTarget.style.borderColor = "#7c3aed"}
+             onBlur={(e) => e.currentTarget.style.borderColor = "#1e2030"}
+             tabIndex={-1}>
 
           <button
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "4px", flexShrink: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#a78bfa"}
-            onMouseLeave={e => e.currentTarget.style.color = "#565f89"}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "6px", borderRadius: 8, transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#a78bfa"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#565f89"; }}
           >
             <Paperclip size={18} />
           </button>
@@ -98,28 +124,30 @@ export default function ChatArea({ conversation }) {
             value={message}
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Mensaje a ${conversation.name}...`}
+            placeholder={`Escribe un mensaje a ${conversation.name}...`}
             rows={1}
-            style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#c0caf5", fontSize: 14, resize: "none", fontFamily: "system-ui, sans-serif", lineHeight: 1.5, maxHeight: 120, overflowY: "auto" }}
+            style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#c0caf5", fontSize: 14, resize: "none", fontFamily: "system-ui, sans-serif", lineHeight: 1.5, maxHeight: 100, overflowY: "auto", padding: "4px 0" }}
           />
 
           <button
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "4px", flexShrink: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#a78bfa"}
-            onMouseLeave={e => e.currentTarget.style.color = "#565f89"}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "6px", borderRadius: 8, transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#a78bfa"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#565f89"; }}
           >
             <Smile size={18} />
           </button>
 
           <button
             onClick={handleSend}
-            style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: message.trim() ? "#7c3aed" : "#1e2030", border: "none", cursor: message.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: message.trim() ? "white" : "#565f89", transition: "all 0.15s" }}
+            style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: message.trim() ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : "#1e2030", border: "none", cursor: message.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: message.trim() ? "white" : "#565f89", transition: "all 0.2s", boxShadow: message.trim() ? "0 4px 12px rgba(124, 58, 237, 0.3)" : "none" }}
+            onMouseEnter={e => { if (message.trim()) e.currentTarget.style.transform = "scale(1.05)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
           >
-            <Send size={15} />
+            <Send size={16} />
           </button>
         </div>
-        <p style={{ color: "#2d2f45", fontSize: 11, textAlign: "center", marginTop: 6 }}>
-          Enter para enviar, Shift+Enter para nueva linea
+        <p style={{ color: "#2d2f45", fontSize: 11, textAlign: "center", marginTop: 8 }}>
+          Enter para enviar • Shift+Enter para nueva línea
         </p>
       </div>
     </div>

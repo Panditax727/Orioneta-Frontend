@@ -1,77 +1,29 @@
 import { useState } from "react";
-
-// Testeando frontend con conversaciones mockeadas, luego se conectará con el backend
-// MENSAJES DIRECTOS
-const MOCK_DMS = [
-  {
-    id: 1,
-    name: "OrionTheProgrammer",
-    avatar: "O",
-    lastMessage: "Dale, lo veo mañana",
-    time: "12:34",
-    unread: 2,
-    online: true,
-  },
-  {
-    id: 2,
-    name: "Flipper",
-    avatar: "F",
-    lastMessage: "Nos vemos?",
-    time: "11:20",
-    unread: 0,
-    online: false,
-  },
-  {
-    id: 3,
-    name: "zBleend",
-    avatar: "Z",
-    lastMessage: "Ok gracias!",
-    time: "09:05",
-    unread: 1,
-    online: true,
-  },
-];
-
-// Testeando frontend con conversaciones mockeadas, luego se conectará con el backend
-// CANALES | GRUPOS
-const MOCK_CHANNELS = [
-  {
-    id: 10,
-    name: "general",
-    lastMessage: "Bienvenidos al canal",
-    time: "10:00",
-    unread: 5,
-    members: 12,
-  },
-  {
-    id: 11,
-    name: "desarrollo",
-    lastMessage: "Merge aprobado",
-    time: "08:45",
-    unread: 0,
-    members: 4,
-  },
-  {
-    id: 12,
-    name: "gaming",
-    lastMessage: "Quien quiere jugar?",
-    time: "ayer",
-    unread: 3,
-    members: 8,
-  },
-];
+import { useConversations } from "../hooks/useConversations";
 
 export default function Sidebar({
   activeSection,
   selectedConversation,
   onSelectConversation,
+  style,
 }) {
   const [search, setSearch] = useState("");
+  const { conversations, loading, error, markAsRead } = useConversations(activeSection);
 
-  const items = activeSection === "chats" ? MOCK_DMS : MOCK_CHANNELS;
-  const filtered = items.filter((i) =>
+  const filtered = conversations.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const handleClick = async (item) => {
+    onSelectConversation(item);
+    if (item.unread > 0) {
+      try {
+        await markAsRead(item.id);
+      } catch (err) {
+        console.error("Error al marcar como leído:", err);
+      }
+    }
+  };
 
   return (
     <div
@@ -82,6 +34,7 @@ export default function Sidebar({
         borderRight: "1px solid #1e2030",
         display: "flex",
         flexDirection: "column",
+        ...style,
       }}
     >
       {/* Header */}
@@ -176,15 +129,35 @@ export default function Sidebar({
 
       {/* Lista */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-        {filtered.map((item) => (
-          <ConversationItem
-            key={item.id}
-            item={item}
-            isChannel={activeSection === "channels"}
-            selected={selectedConversation?.id === item.id}
-            onClick={() => onSelectConversation(item)}
-          />
-        ))}
+        {loading ? (
+          <div style={{ padding: "20px", textAlign: "center" }}>
+            <span style={{ color: "#565f89", fontSize: "13px" }}>
+              Cargando...
+            </span>
+          </div>
+        ) : error ? (
+          <div style={{ padding: "20px", textAlign: "center" }}>
+            <span style={{ color: "#ef4444", fontSize: "13px" }}>
+              Error: {error}
+            </span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center" }}>
+            <span style={{ color: "#565f89", fontSize: "13px" }}>
+              No se encontraron conversaciones
+            </span>
+          </div>
+        ) : (
+          filtered.map((item) => (
+            <ConversationItem
+              key={item.id}
+              item={item}
+              isChannel={activeSection === "channels"}
+              selected={selectedConversation?.id === item.id}
+              onClick={() => handleClick(item)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
