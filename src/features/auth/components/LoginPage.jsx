@@ -6,7 +6,6 @@ import Loader from "../../../shared/components/Loader";
 
 const OAUTH_PROVIDERS = [
   { id: "google", Icon: FaGoogle, color: "#4285F4" },
-  { id: "discord", Icon: FaDiscord, color: "#5865F2" },
   { id: "github", Icon: FaGithub, color: "#ffffff" },
 ];
 
