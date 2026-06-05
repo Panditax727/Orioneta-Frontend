@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { theme } from "../theme";
 
 export default function Input({
   type = "text",
@@ -18,11 +19,11 @@ export default function Input({
       {label && (
         <label
           style={{
-            color: "#c0caf5",
-            fontSize: 13,
-            fontWeight: 500,
+            color: theme.colors.text.secondary,
+            fontSize: theme.typography.fontSize.base,
+            fontWeight: theme.typography.fontWeight.medium,
             display: "block",
-            marginBottom: 8,
+            marginBottom: theme.spacing.sm,
           }}
         >
           {label}
@@ -36,7 +37,7 @@ export default function Input({
               left: 14,
               top: "50%",
               transform: "translateY(-50%)",
-              color: "#565f89",
+              color: theme.colors.text.tertiary,
               display: "flex",
               alignItems: "center",
             }}
@@ -55,15 +56,15 @@ export default function Input({
           style={{
             width: "100%",
             padding: `12px ${rightElement ? "44px" : "14px"} 12px ${icon ? "40px" : "14px"}`,
-            background: "#1a1b26",
-            border: `1px solid ${error ? "#ef4444" : focused ? "#7c3aed" : "#1e2030"}`,
-            borderRadius: 12,
-            color: "#c0caf5",
-            fontSize: 14,
+            background: theme.colors.background.tertiary,
+            border: `1px solid ${error ? theme.colors.functional.error : focused ? theme.colors.border.focus : theme.colors.border.default}`,
+            borderRadius: theme.borderRadius.lg,
+            color: theme.colors.text.secondary,
+            fontSize: theme.typography.fontSize.md,
             outline: "none",
             boxSizing: "border-box",
             transition: "border-color 0.15s",
-            fontFamily: "system-ui, sans-serif",
+            fontFamily: theme.typography.fontFamily,
           }}
         />
         {rightElement && (
@@ -80,7 +81,7 @@ export default function Input({
         )}
       </div>
       {error && (
-        <p style={{ color: "#ef4444", fontSize: 12, marginTop: 4 }}>{error}</p>
+        <p style={{ color: theme.colors.functional.error, fontSize: theme.typography.fontSize.sm, marginTop: theme.spacing.xs }}>{error}</p>
       )}
     </div>
   );

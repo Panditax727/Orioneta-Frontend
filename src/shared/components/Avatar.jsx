@@ -1,3 +1,5 @@
+import { theme } from "../theme";
+
 export default function Avatar({
   name = "?",
   src = null,
@@ -18,7 +20,7 @@ export default function Avatar({
           borderRadius: radius,
           background: src
             ? "transparent"
-            : "linear-gradient(135deg, #7c3aed, #4f46e5)",
+            : theme.colors.primaryGradient || "linear-gradient(135deg, #7c3aed, #4f46e5)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -35,7 +37,11 @@ export default function Avatar({
           />
         ) : (
           <span
-            style={{ color: "white", fontSize: size * 0.38, fontWeight: 600 }}
+            style={{ 
+              color: theme.colors.text.primary, 
+              fontSize: size * 0.38, 
+              fontWeight: theme.typography.fontWeight.semibold 
+            }}
           >
             {name[0].toUpperCase()}
           </span>
@@ -51,8 +57,8 @@ export default function Avatar({
             width: size * 0.26,
             height: size * 0.26,
             borderRadius: "50%",
-            background: online ? "#22c55e" : "#565f89",
-            border: "2px solid #13141c",
+            background: online ? theme.colors.status.online : theme.colors.status.offline,
+            border: `2px solid ${theme.colors.background.main}`,
           }}
         />
       )}
