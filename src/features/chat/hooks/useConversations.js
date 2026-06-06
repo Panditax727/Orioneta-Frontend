@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { chatService } from "../services/chatService";
 
 export function useConversations(type = "dms") {
@@ -6,19 +6,35 @@ export function useConversations(type = "dms") {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const normalizedType = type === "chats" ? "dms" : type;
+  const fetchingRef = useRef(false);
 
-  const fetchConversations = useCallback(async () => {
+  const fetchConversations = useCallback(async ({ silent = false } = {}) => {
+    if (fetchingRef.current) {
+      return;
+    }
+
     try {
-      setLoading(true);
-      setError(null);
+      fetchingRef.current = true;
+
+      if (!silent) {
+        setLoading(true);
+      }
+
       const data = normalizedType === "dms"
         ? await chatService.getDirectMessages()
         : await chatService.getChannels();
       setConversations(data);
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      if (!silent) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      fetchingRef.current = false;
+
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [normalizedType]);
 
@@ -65,7 +81,7 @@ export function useConversations(type = "dms") {
   }, [fetchConversations]);
 
   useEffect(() => chatService.subscribe(() => {
-    void fetchConversations();
+    void fetchConversations({ silent: true });
   }), [fetchConversations]);
 
   return {

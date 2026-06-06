@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { chatService } from "../services/chatService";
 
 export function useChat(conversationId) {
@@ -6,19 +6,37 @@ export function useChat(conversationId) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const fetchingRef = useRef(false);
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async ({ silent = false } = {}) => {
     if (!conversationId) return;
+
+    if (fetchingRef.current) {
+      return;
+    }
     
     try {
-      setLoading(true);
-      setError(null);
+      fetchingRef.current = true;
+
+      if (!silent) {
+        setLoading(true);
+      }
+
       const data = await chatService.getMessages(conversationId);
-      setMessages(data);
+      setMessages((currentMessages) => (
+        areMessagesEqual(currentMessages, data) ? currentMessages : data
+      ));
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      if (!silent) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      fetchingRef.current = false;
+
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [conversationId]);
 
@@ -49,7 +67,9 @@ export function useChat(conversationId) {
     });
 
     const intervalId = window.setInterval(() => {
-      void fetchMessages();
+      if (document.visibilityState === "visible") {
+        void fetchMessages({ silent: true });
+      }
     }, 3500);
 
     return () => window.clearInterval(intervalId);
@@ -63,4 +83,18 @@ export function useChat(conversationId) {
     sendMessage,
     fetchMessages,
   };
+}
+
+function areMessagesEqual(currentMessages, nextMessages) {
+  if (currentMessages.length !== nextMessages.length) {
+    return false;
+  }
+
+  return currentMessages.every((message, index) => {
+    const nextMessage = nextMessages[index];
+
+    return message.id === nextMessage.id
+      && message.content === nextMessage.content
+      && message.status === nextMessage.status;
+  });
 }
