@@ -10,7 +10,7 @@ export default function ChatLayout() {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [leftPanelVisible, setLeftPanelVisible] = useState(false);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [showChatDetails, setShowChatDetails] = useState(false);
 
   useEffect(() => {
