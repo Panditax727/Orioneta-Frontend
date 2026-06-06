@@ -11,6 +11,7 @@ export const theme = {
     primary: "#4F46E5",
     primaryLight: "#8B5CF6",
     primaryDark: "#3730A3",
+    primaryGradient: "linear-gradient(135deg, #7c3aed, #4f46e5)",
     accent: "#06B6D4",
     background: {
       main: "#0d0e14",
@@ -42,6 +43,13 @@ export const theme = {
       focus: "#7c3aed",
       hover: "#252838",
     },
+  },
+  shadow: {
+    sm: "0 1px 2px rgba(0, 0, 0, 0.3)",
+    md: "0 4px 6px rgba(0, 0, 0, 0.3)",
+    lg: "0 10px 15px rgba(0, 0, 0, 0.3)",
+    xl: "0 20px 25px rgba(0, 0, 0, 0.3)",
+    primary: "0 4px 12px rgba(124, 58, 237, 0.3)",
   },
   typography: {
     fontFamily: "Inter, system-ui, -apple-system, sans-serif",

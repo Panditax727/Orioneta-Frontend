@@ -11,6 +11,8 @@ export default function Input({
   error,
   icon = null,
   rightElement = null,
+  disabled = false,
+  ...inputProps
 }) {
   const [focused, setFocused] = useState(false);
 
@@ -50,9 +52,11 @@ export default function Input({
           name={name}
           value={value}
           onChange={onChange}
+          disabled={disabled}
           placeholder={placeholder}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          {...inputProps}
           style={{
             width: "100%",
             padding: `12px ${rightElement ? "44px" : "14px"} 12px ${icon ? "40px" : "14px"}`,
@@ -65,6 +69,7 @@ export default function Input({
             boxSizing: "border-box",
             transition: "border-color 0.15s",
             fontFamily: theme.typography.fontFamily,
+            opacity: disabled ? 0.72 : 1,
           }}
         />
         {rightElement && (

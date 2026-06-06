@@ -26,7 +26,7 @@ Nuestra visión es crear un ecosistema donde la comunicación, la colaboración 
 
 Orioneta es una plataforma de comunicación desarrollada con un enfoque moderno en experiencia de usuario, rendimiento y escalabilidad.
 
-El sistema está compuesto por múltiples servicios independientes que trabajan en conjunto para proporcionar funcionalidades de mensajería, gestión de usuarios, comunidades, notificaciones y futuras herramientas colaborativas.
+El sistema está compuesto por múltiples servicios independientes que trabajan en conjunto para proporcionar funcionalidades de mensajería, gestión de usuarios, grupos privados, notificaciones y futuras herramientas colaborativas.
 
 El frontend de Orioneta tiene como objetivo ofrecer una interfaz visual atractiva, consistente y fácil de utilizar, combinando diseño moderno, accesibilidad y personalización.
 
@@ -92,7 +92,6 @@ El frontend consume los distintos microservicios mediante un API Gateway central
 - Vite
 - JavaScript / TypeScript
 - Tailwind CSS
-- Axios
 - React Router
 - WebSockets (Próximamente)
 
@@ -148,6 +147,39 @@ La aplicación estará disponible en:
 http://localhost:5173
 ```
 
+### Configurar conexion con backend
+
+Crea un archivo `.env` usando el ejemplo incluido:
+
+```bash
+cp .env.example .env
+```
+
+Para backend local:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+Para probar contra EC2, usa la URL publica del gateway:
+
+```env
+VITE_API_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080
+```
+
+El frontend espera estos endpoints del gateway:
+
+```text
+POST /api/auth/login
+POST /api/auth/register
+GET  /api/auth/oauth2/providers
+GET  /oauth2/authorization/google
+GET  /oauth2/authorization/github
+```
+
+La respuesta de autenticacion debe incluir `accessToken`, `refreshToken`,
+`tokenType`, `expiresInSeconds`, `userId`, `email` y `role`.
+
 ---
 
 ## 🌌 Visión del Proyecto
@@ -172,7 +204,7 @@ El proyecto está siendo desarrollado siguiendo principios de:
 
 - [x] Diseño inicial
 - [x] Configuración Frontend
-- [ ] Sistema de autenticación
+- [x] Sistema de autenticación frontend conectado al gateway
 - [ ] Chats privados
 - [ ] Chats grupales
 - [ ] WebSockets

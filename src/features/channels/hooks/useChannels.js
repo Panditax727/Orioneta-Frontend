@@ -70,7 +70,9 @@ export function useChannels() {
 
   // Cargar canales al montar el componente
   useEffect(() => {
-    fetchChannels();
+    queueMicrotask(() => {
+      void fetchChannels();
+    });
   }, [fetchChannels]);
 
   return {
