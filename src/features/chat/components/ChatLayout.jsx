@@ -169,7 +169,6 @@ export default function ChatLayout() {
             }}
           >
             <Sidebar
-              activeSection={activeSection}
               selectedConversation={selectedConversation}
               onSelectConversation={(conv) => {
                 setSelectedConversation(conv);
