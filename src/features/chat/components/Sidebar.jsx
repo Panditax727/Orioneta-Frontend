@@ -2,17 +2,22 @@ import { useState } from "react";
 import { useConversations } from "../hooks/useConversations";
 
 export default function Sidebar({
-  activeSection,
   selectedConversation,
   onSelectConversation,
   style,
 }) {
   const [search, setSearch] = useState("");
-  const { conversations, loading, error, markAsRead } = useConversations(activeSection);
+  const [filter, setFilter] = useState("all"); // all, direct, groups
+  const { conversations, loading, error, markAsRead } = useConversations();
 
-  const filtered = conversations.filter((i) =>
-    i.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = conversations.filter((i) => {
+    const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
+    const matchesFilter = 
+      filter === "all" || 
+      (filter === "direct" && !i.isGroup) || 
+      (filter === "groups" && i.isGroup);
+    return matchesSearch && matchesFilter;
+  });
 
   const handleClick = async (item) => {
     onSelectConversation(item);
@@ -57,7 +62,7 @@ export default function Sidebar({
               margin: 0,
             }}
           >
-            {activeSection === "chats" ? "Mensajes" : "Canales"}
+            Mensajes
           </h2>
           <button
             style={{
@@ -83,6 +88,64 @@ export default function Sidebar({
             >
               <path d="M12 5v14M5 12h14" />
             </svg>
+          </button>
+        </div>
+
+        {/* Filter buttons */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
+          <button
+            onClick={() => setFilter("all")}
+            style={{
+              flex: 1,
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: filter === "all" ? "#7c3aed" : "#1a1b26",
+              border: "1px solid #1e2030",
+              color: filter === "all" ? "white" : "#565f89",
+              fontSize: 12,
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            Todos
+          </button>
+          <button
+            onClick={() => setFilter("direct")}
+            style={{
+              flex: 1,
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: filter === "direct" ? "#7c3aed" : "#1a1b26",
+              border: "1px solid #1e2030",
+              color: filter === "direct" ? "white" : "#565f89",
+              fontSize: 12,
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            Directos
+          </button>
+          <button
+            onClick={() => setFilter("groups")}
+            style={{
+              flex: 1,
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: filter === "groups" ? "#7c3aed" : "#1a1b26",
+              border: "1px solid #1e2030",
+              color: filter === "groups" ? "white" : "#565f89",
+              fontSize: 12,
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            Grupos
           </button>
         </div>
 
@@ -152,7 +215,6 @@ export default function Sidebar({
             <ConversationItem
               key={item.id}
               item={item}
-              isChannel={activeSection === "channels"}
               selected={selectedConversation?.id === item.id}
               onClick={() => handleClick(item)}
             />
@@ -163,7 +225,7 @@ export default function Sidebar({
   );
 }
 
-function ConversationItem({ item, isChannel, selected, onClick }) {
+function ConversationItem({ item, selected, onClick }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -188,21 +250,21 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
           style={{
             width: 38,
             height: 38,
-            borderRadius: isChannel ? 10 : "50%",
-            background: isChannel
+            borderRadius: item.isGroup ? 10 : "50%",
+            background: item.isGroup
               ? "#1e2030"
               : "linear-gradient(135deg, #7c3aed, #4f46e5)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: "white",
-            fontSize: isChannel ? 16 : 14,
+            fontSize: item.isGroup ? 16 : 14,
             fontWeight: 600,
           }}
         >
-          {isChannel ? "#" : item.avatar}
+          {item.isGroup ? "#" : item.avatar}
         </div>
-        {!isChannel && item.online && (
+        {!item.isGroup && item.online && (
           <div
             style={{
               position: "absolute",

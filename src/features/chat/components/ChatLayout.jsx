@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, Users, Search, Bell, Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, Users, Search, Bell, Menu, X, ChevronLeft, ChevronRight, Info, Settings } from "lucide-react";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
+import ChatDetails from "./ChatDetails";
+import { useNavigate } from "react-router-dom";
 
 export default function ChatLayout() {
+  const navigate = useNavigate();
   const [selectedConversation, setSelectedConversation] = useState(null);
-  const [activeSection, setActiveSection] = useState("chats");
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelVisible, setLeftPanelVisible] = useState(false);
+  const [showChatDetails, setShowChatDetails] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -109,17 +112,10 @@ export default function ChatLayout() {
         <NavDivider />
 
         <NavIcon
-          active={activeSection === "chats"}
-          onClick={() => setActiveSection("chats")}
-          tooltip="Mensajes directos"
+          active={true}
+          onClick={() => {}}
+          tooltip="Mensajes"
           icon={<MessageSquare size={20} />}
-        />
-
-        <NavIcon
-          active={activeSection === "channels"}
-          onClick={() => setActiveSection("channels")}
-          tooltip="Canales"
-          icon={<Users size={20} />}
         />
 
         <NavIcon
@@ -130,6 +126,12 @@ export default function ChatLayout() {
         <NavIcon
           tooltip="Notificaciones"
           icon={<Bell size={20} />}
+        />
+
+        <NavIcon
+          tooltip="Configuración"
+          icon={<Settings size={20} />}
+          onClick={() => navigate("/settings")}
         />
 
         <div style={{ flex: 1 }} />
@@ -158,28 +160,35 @@ export default function ChatLayout() {
             />
           )}
           
-          <Sidebar
-            activeSection={activeSection}
-            selectedConversation={selectedConversation}
-            onSelectConversation={(conv) => {
-              setSelectedConversation(conv);
-              if (isMobile) setSidebarOpen(false);
-            }}
+          <div
             style={{
-              position: isMobile ? "fixed" : "relative",
-              left: isMobile ? 0 : "auto",
-              top: isMobile ? 0 : "auto",
-              height: isMobile ? "100vh" : "auto",
-              zIndex: isMobile ? 999 : "auto",
               width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
-              opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
-              transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-              transition: isMobile 
-                ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease" 
-                : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
+              transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               overflow: "hidden",
+              flexShrink: 0,
             }}
-          />
+          >
+            <Sidebar
+              activeSection={activeSection}
+              selectedConversation={selectedConversation}
+              onSelectConversation={(conv) => {
+                setSelectedConversation(conv);
+                if (isMobile) setSidebarOpen(false);
+              }}
+              style={{
+                position: isMobile ? "fixed" : "relative",
+                left: isMobile ? 0 : "auto",
+                top: isMobile ? 0 : "auto",
+                height: isMobile ? "100vh" : "auto",
+                zIndex: isMobile ? 999 : "auto",
+                opacity: isMobile ? (sidebarOpen ? 1 : 0) : 1,
+                transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
+                transition: isMobile 
+                  ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)" 
+                  : "none",
+              }}
+            />
+          </div>
         </>
       )}
 
@@ -187,6 +196,8 @@ export default function ChatLayout() {
       <ChatArea 
         conversation={selectedConversation} 
         isMobile={isMobile}
+        showDetails={showChatDetails}
+        onToggleDetails={() => setShowChatDetails(!showChatDetails)}
         onBack={() => {
           if (isMobile) {
             setSelectedConversation(null);
@@ -194,6 +205,14 @@ export default function ChatLayout() {
           }
         }}
       />
+
+      {/* ChatDetails */}
+      {!isMobile && selectedConversation && showChatDetails && (
+        <ChatDetails 
+          conversation={selectedConversation}
+          onClose={() => setShowChatDetails(false)}
+        />
+      )}
     </div>
   );
 }

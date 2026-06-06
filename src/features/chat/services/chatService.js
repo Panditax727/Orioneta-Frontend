@@ -1,7 +1,8 @@
 // Servicio para manejar la lógica de chat y conversaciones
 // Por ahora usa datos mockeados, luego se conectará con el backend
 
-const MOCK_DMS = [
+const MOCK_CONVERSATIONS = [
+  // Chats directos
   {
     id: 1,
     name: "OrionTheProgrammer",
@@ -10,6 +11,7 @@ const MOCK_DMS = [
     time: "12:34",
     unread: 2,
     online: true,
+    isGroup: false,
   },
   {
     id: 2,
@@ -19,6 +21,7 @@ const MOCK_DMS = [
     time: "11:20",
     unread: 0,
     online: false,
+    isGroup: false,
   },
   {
     id: 3,
@@ -28,10 +31,9 @@ const MOCK_DMS = [
     time: "09:05",
     unread: 1,
     online: true,
+    isGroup: false,
   },
-];
-
-const MOCK_CHANNELS = [
+  // Grupos
   {
     id: 10,
     name: "general",
@@ -39,6 +41,7 @@ const MOCK_CHANNELS = [
     time: "10:00",
     unread: 5,
     members: 12,
+    isGroup: true,
   },
   {
     id: 11,
@@ -47,6 +50,7 @@ const MOCK_CHANNELS = [
     time: "08:45",
     unread: 0,
     members: 4,
+    isGroup: true,
   },
   {
     id: 12,
@@ -55,6 +59,7 @@ const MOCK_CHANNELS = [
     time: "ayer",
     unread: 3,
     members: 8,
+    isGroup: true,
   },
 ];
 
@@ -68,16 +73,10 @@ const MOCK_MESSAGES = {
 };
 
 export const chatService = {
-  // Obtener conversaciones directas (DMs)
-  getDirectMessages: async () => {
+  // Obtener todas las conversaciones (chats directos y grupos)
+  getConversations: async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_DMS;
-  },
-
-  // Obtener canales
-  getChannels: async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_CHANNELS;
+    return MOCK_CONVERSATIONS;
   },
 
   // Obtener mensajes de una conversación
@@ -103,44 +102,36 @@ export const chatService = {
     MOCK_MESSAGES[conversationId].push(newMessage);
     
     // Actualizar lastMessage en la conversación
-    const dmIndex = MOCK_DMS.findIndex(dm => dm.id === conversationId);
-    if (dmIndex !== -1) {
-      MOCK_DMS[dmIndex].lastMessage = content;
-      MOCK_DMS[dmIndex].time = newMessage.time;
+    const convIndex = MOCK_CONVERSATIONS.findIndex(conv => conv.id === conversationId);
+    if (convIndex !== -1) {
+      MOCK_CONVERSATIONS[convIndex].lastMessage = content;
+      MOCK_CONVERSATIONS[convIndex].time = newMessage.time;
     }
     
     return newMessage;
   },
 
   // Buscar conversaciones
-  searchConversations: async (query, type = "all") => {
+  searchConversations: async (query, filter = "all") => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    if (!query) return { dms: MOCK_DMS, channels: MOCK_CHANNELS };
+    if (!query) return MOCK_CONVERSATIONS;
     
-    const filteredDMs = MOCK_DMS.filter(dm =>
-      dm.name.toLowerCase().includes(query.toLowerCase())
-    );
-    
-    const filteredChannels = MOCK_CHANNELS.filter(channel =>
-      channel.name.toLowerCase().includes(query.toLowerCase())
-    );
-    
-    return {
-      dms: type === "channels" ? [] : filteredDMs,
-      channels: type === "dms" ? [] : filteredChannels,
-    };
+    return MOCK_CONVERSATIONS.filter(conv => {
+      const matchesQuery = conv.name.toLowerCase().includes(query.toLowerCase());
+      const matchesFilter = 
+        filter === "all" || 
+        (filter === "direct" && !conv.isGroup) || 
+        (filter === "groups" && conv.isGroup);
+      return matchesQuery && matchesFilter;
+    });
   },
 
   // Marcar conversación como leída
   markAsRead: async (conversationId) => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    const dmIndex = MOCK_DMS.findIndex(dm => dm.id === conversationId);
-    if (dmIndex !== -1) {
-      MOCK_DMS[dmIndex].unread = 0;
-    }
-    const channelIndex = MOCK_CHANNELS.findIndex(ch => ch.id === conversationId);
-    if (channelIndex !== -1) {
-      MOCK_CHANNELS[channelIndex].unread = 0;
+    const convIndex = MOCK_CONVERSATIONS.findIndex(conv => conv.id === conversationId);
+    if (convIndex !== -1) {
+      MOCK_CONVERSATIONS[convIndex].unread = 0;
     }
     return true;
   },
