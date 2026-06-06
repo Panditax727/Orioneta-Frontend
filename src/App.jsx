@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import OAuthCallbackPage from "./features/auth/components/OAuthCallbackPage";
+import ProtectedRoute from "./features/auth/components/ProtectedRoute";
 import LoginPage from "./features/auth/components/LoginPage";
 import RegisterPage from "./features/auth/components/RegisterPage";
 import ChatLayout from "./features/chat/components/ChatLayout";
@@ -11,8 +13,24 @@ function App() {
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/chat" element={<ChatLayout />} />
-        <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/auth/oauth2/callback" element={<OAuthCallbackPage />} />
+        <Route path="/auth/oauth2/error" element={<OAuthCallbackPage />} />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatLayout />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/channels"
+          element={
+            <ProtectedRoute>
+              <ChannelsPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

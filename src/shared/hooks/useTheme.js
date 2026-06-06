@@ -1,4 +1,4 @@
-import { useContext, createContext, useContext } from "react";
+import { createContext, useContext } from "react";
 import { theme } from "../theme";
 
 // Contexto del tema

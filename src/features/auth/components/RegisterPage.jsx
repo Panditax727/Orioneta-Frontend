@@ -1,327 +1,226 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { validateEmail, validatePassword, validateUsername } from "../../../shared/utils/validators";
-import { FaGoogle, FaDiscord, FaGithub } from "react-icons/fa";
+import { FaGithub, FaGoogle } from "react-icons/fa";
 import Button from "../../../shared/components/Button";
 import Input from "../../../shared/components/Input";
+import Loader from "../../../shared/components/Loader";
+import {
+  validateDisplayName,
+  validateEmail,
+  validatePassword,
+} from "../../../shared/utils/validators";
+import {
+  DEFAULT_OAUTH_PROVIDERS,
+  getOAuthProviders,
+  redirectToOAuth,
+  register,
+} from "../../../services/authService";
+import { saveSession } from "../session";
+import AuthShell from "./AuthShell";
+import logoImage from "../../../assets/logo.png";
 
-const OAUTH_PROVIDERS = [
-  { id: "google", Icon: FaGoogle, color: "#4285F4" },
-  { id: "github", Icon: FaGithub, color: "#ffffff" },
-];
+const OAUTH_ICONS = {
+  google: { Icon: FaGoogle, color: "#4285F4" },
+  github: { Icon: FaGithub, color: "#ffffff" },
+};
+
+function mergeProviders(apiProviders) {
+  return DEFAULT_OAUTH_PROVIDERS.map((provider) => {
+    const backendProvider = apiProviders.find(
+      (item) => item.provider === provider.id || item.id === provider.id,
+    );
+
+    return {
+      ...provider,
+      ...backendProvider,
+      id: provider.id,
+      label: provider.label,
+    };
+  });
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ username: "", email: "", password: "" });
+  const [form, setForm] = useState({
+    displayName: "",
+    email: "",
+    password: "",
+  });
   const [errors, setErrors] = useState({});
+  const [apiError, setApiError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState(DEFAULT_OAUTH_PROVIDERS);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setErrors({ ...errors, [e.target.name]: null });
+  useEffect(() => {
+    getOAuthProviders()
+      .then((providers) => setOauthProviders(mergeProviders(providers)))
+      .catch(() => setOauthProviders(DEFAULT_OAUTH_PROVIDERS));
+  }, []);
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: null }));
+    setApiError("");
   };
 
-  const handleSubmit = () => {
-    const newErrors = {
-      username: validateUsername(form.username),
+  const validateForm = () => {
+    const nextErrors = {
+      displayName: validateDisplayName(form.displayName),
       email: validateEmail(form.email),
       password: validatePassword(form.password),
     };
-    const hasErrors = Object.values(newErrors).some(Boolean);
-    if (hasErrors) {
-      setErrors(newErrors);
-      return;
-    }
-    console.log("Registrar:", form);
-    navigate("/chat");
+
+    setErrors(nextErrors);
+    return !Object.values(nextErrors).some(Boolean);
   };
 
-  const handleOAuth = (id) => console.log("OAuth:", id);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    setApiError("");
+
+    try {
+      const session = await register(form);
+      saveSession(session);
+      navigate("/chat");
+    } catch (error) {
+      setApiError(error.message || "No se pudo crear la cuenta");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOAuth = (providerId) => {
+    if (loading) {
+      return;
+    }
+
+    redirectToOAuth(providerId, oauthProviders);
+  };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        background: "#0d0e14",
-        fontFamily: "system-ui, sans-serif",
-      }}
+    <AuthShell
+      eyebrow="Unete a Orioneta"
+      title={
+        <>
+          Crea tu cuenta en <span>Orioneta</span>
+        </>
+      }
+      subtitle="Tu universo de conversaciones privadas, grupos y personalizacion te espera."
     >
-      {/* Lado izquierdo */}
-      <div
-        style={{
-          flex: 1,
-          position: "relative",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "32px",
-          background:
-            "url('/src/assets/Orioneta-Hero.png') center/cover no-repeat",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "linear-gradient(to right, rgba(13,14,20,0.2) 0%, rgba(13,14,20,0.6) 100%)",
-            pointerEvents: "none",
-          }}
+      <div className="auth-card-header">
+        <div className="auth-logo-large">
+          <img src={logoImage} alt="Orioneta" />
+        </div>
+        <h1>
+          Bienvenido a <span>bordo</span>
+        </h1>
+        <p>Crea tu cuenta gratuita</p>
+      </div>
+
+      {apiError && <div className="auth-alert">{apiError}</div>}
+
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <Input
+          type="text"
+          name="displayName"
+          label="Nombre visible"
+          placeholder="panditax"
+          value={form.displayName}
+          onChange={handleChange}
+          error={errors.displayName}
+          disabled={loading}
+          autoComplete="name"
+          icon={<span style={{ color: "#565f89", fontSize: 14 }}>@</span>}
         />
 
-        <div
-          style={{
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: "rgba(255,255,255,0.15)",
-              backdropFilter: "blur(8px)",
-              border: "1px solid rgba(255,255,255,0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-            }}
-          >
-            <img
-              src="/src/assets/logo.png"
-              style={{ width: "90%", height: "90%", objectFit: "contain" }}
-              alt="Orioneta"
-            />
-          </div>
-          <span style={{ color: "white", fontWeight: 600, fontSize: 18 }}>
-            Orioneta
-          </span>
-        </div>
+        <Input
+          type="email"
+          name="email"
+          label="Correo electronico"
+          placeholder="usuario@orioneta.com"
+          value={form.email}
+          onChange={handleChange}
+          error={errors.email}
+          disabled={loading}
+          autoComplete="email"
+          icon={<span style={{ fontSize: 15 }}>✉</span>}
+        />
 
-        <div style={{ position: "relative" }}>
-          <p
-            style={{
-              display: "inline-block",
-              padding: "6px 16px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.2)",
-              color: "rgba(255,255,255,0.8)",
-              fontSize: 13,
-              marginBottom: 20,
-            }}
-          >
-            Unete a la comunidad
-          </p>
-          <h2
-            style={{
-              color: "white",
-              fontSize: 32,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              marginBottom: 12,
-            }}
-          >
-            Crea tu cuenta en <span style={{ color: "#a78bfa" }}>Orioneta</span>
-          </h2>
-          <p
-            style={{
-              color: "rgba(255,255,255,0.6)",
-              fontSize: 14,
-              maxWidth: 340,
-            }}
-          >
-            Tu universo de conexiones te espera. Registrate gratis y empieza
-            hoy.
-          </p>
-        </div>
+        <Input
+          type={showPassword ? "text" : "password"}
+          name="password"
+          label="Contrasena"
+          placeholder="Minimo 8 caracteres"
+          value={form.password}
+          onChange={handleChange}
+          error={errors.password}
+          disabled={loading}
+          autoComplete="new-password"
+          icon={<span style={{ fontSize: 13 }}>✦</span>}
+          rightElement={
+            <button
+              type="button"
+              aria-label={showPassword ? "Ocultar contrasena" : "Ver contrasena"}
+              onClick={() => setShowPassword((current) => !current)}
+              className="auth-input-icon-button"
+              disabled={loading}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          }
+        />
 
-        <p
-          style={{
-            position: "relative",
-            color: "rgba(255,255,255,0.3)",
-            fontSize: 12,
-          }}
-        >
-          2025 Orioneta. Hecho con amor para conectar personas.
-        </p>
+        <Button fullWidth type="submit" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader size={16} color="white" />
+              Creando...
+            </>
+          ) : (
+            "Crear cuenta"
+          )}
+        </Button>
+      </form>
+
+      <div className="auth-divider">
+        <span />
+        <p>o registrate con</p>
+        <span />
       </div>
 
-      {/* Lado derecho */}
-      <div
-        style={{
-          width: 440,
-          flexShrink: 0,
-          background: "#13141c",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "40px",
-          borderLeft: "1px solid #1e2030",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 360 }}>
-          <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div
-              style={{
-                width: 88,
-                height: 88,
-                borderRadius: "50%",
-                border: "3px solid #7c3aed",
-                background: "linear-gradient(135deg, #1a1b26, #2d2f45)",
-                margin: "0 auto 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-              }}
+      <div className="auth-oauth-grid">
+        {oauthProviders.map((provider) => {
+          const oauthIcon = OAUTH_ICONS[provider.id];
+          const Icon = oauthIcon.Icon;
+
+          return (
+            <button
+              key={provider.id}
+              type="button"
+              className="auth-oauth-button"
+              onClick={() => handleOAuth(provider.id)}
+              disabled={loading}
+              title={`Registrarte con ${provider.label}`}
             >
-              <img
-                src="/src/assets/logo.png"
-                style={{ width: "80%", height: "80%", objectFit: "contain" }}
-                alt="Orioneta"
-              />
-            </div>
-            <h1
-              style={{
-                color: "white",
-                fontSize: 24,
-                fontWeight: 700,
-                marginBottom: 6,
-              }}
-            >
-              Bienvenido a <span style={{ color: "#a78bfa" }}>bordo</span>
-            </h1>
-            <p style={{ color: "#565f89", fontSize: 14 }}>
-              Crea tu cuenta gratuita
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              marginBottom: 20,
-            }}
-          >
-            <Input
-              type="text"
-              name="username"
-              label="Nombre de usuario"
-              placeholder="panditax"
-              value={form.username}
-              onChange={handleChange}
-              error={errors.username}
-              icon={<span style={{ color: "#565f89", fontSize: 14 }}>@</span>}
-            />
-            <Input
-              type="email"
-              name="email"
-              label="Correo electronico"
-              placeholder="usuario@orioneta.com"
-              value={form.email}
-              onChange={handleChange}
-              error={errors.email}
-              icon={<span style={{ fontSize: 15 }}>✉</span>}
-            />
-            <Input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              label="Contrasena"
-              placeholder="Minimo 6 caracteres"
-              value={form.password}
-              onChange={handleChange}
-              error={errors.password}
-              icon={<span style={{ fontSize: 13 }}>✦</span>}
-              rightElement={
-                <button
-                  onClick={() => setShowPassword((p) => !p)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    display: "flex",
-                  }}
-                >
-                  {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
-                </button>
-              }
-            />
-          </div>
-
-          <Button fullWidth onClick={handleSubmit}>
-            Crear cuenta
-          </Button>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              margin: "20px 0",
-            }}
-          >
-            <div style={{ flex: 1, height: 1, background: "#1e2030" }} />
-            <span style={{ color: "#565f89", fontSize: 12 }}>
-              o registrate con
-            </span>
-            <div style={{ flex: 1, height: 1, background: "#1e2030" }} />
-          </div>
-
-          <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-            {OAUTH_PROVIDERS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handleOAuth(p.id)}
-                style={{
-                  flex: 1,
-                  padding: "12px",
-                  background: "#1a1b26",
-                  border: "1px solid #1e2030",
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "border-color 0.15s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#7c3aed";
-                  e.currentTarget.style.background = "#1e2030";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#1e2030";
-                  e.currentTarget.style.background = "#1a1b26";
-                }}
-              >
-                <p.Icon size={22} color={p.color} />
-              </button>
-            ))}
-          </div>
-
-          <p style={{ textAlign: "center", color: "#565f89", fontSize: 13 }}>
-            Ya tienes cuenta?{" "}
-            <a
-              href="/login"
-              style={{
-                color: "#a78bfa",
-                textDecoration: "none",
-                fontWeight: 500,
-              }}
-            >
-              Inicia sesion
-            </a>
-          </p>
-        </div>
+              <Icon size={22} color={oauthIcon.color} />
+            </button>
+          );
+        })}
       </div>
-    </div>
+
+      <p className="auth-switch">
+        Ya tienes cuenta? <Link to="/login">Inicia sesion</Link>
+      </p>
+    </AuthShell>
   );
 }

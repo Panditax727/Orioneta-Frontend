@@ -62,7 +62,9 @@ export function usePresence() {
 
   // Cargar datos al montar
   useEffect(() => {
-    fetchData();
+    queueMicrotask(() => {
+      void fetchData();
+    });
   }, [fetchData]);
 
   // Simular actualizaciones de presencia en tiempo real

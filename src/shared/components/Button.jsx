@@ -33,6 +33,7 @@ export default function Button({
   onClick,
   type = "button",
   icon = null,
+  ...buttonProps
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -45,6 +46,7 @@ export default function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      {...buttonProps}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

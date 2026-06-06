@@ -46,7 +46,9 @@ export function useConversations(type = "dms") {
   }, []);
 
   useEffect(() => {
-    fetchConversations();
+    queueMicrotask(() => {
+      void fetchConversations();
+    });
   }, [fetchConversations]);
 
   return {

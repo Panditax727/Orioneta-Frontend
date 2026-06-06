@@ -1,14 +1,20 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, Users, Search, Bell, Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, LogOut, Menu, MessageSquare, Search, Users, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
+import { clearSession, getSession } from "../../auth/session";
+import logoImage from "../../../assets/logo.png";
 
 export default function ChatLayout() {
+  const navigate = useNavigate();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [activeSection, setActiveSection] = useState("chats");
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelVisible, setLeftPanelVisible] = useState(false);
+  const session = getSession();
+  const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
 
   useEffect(() => {
     const checkMobile = () => {
@@ -23,12 +29,6 @@ export default function ChatLayout() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  useEffect(() => {
-    if (selectedConversation && isMobile) {
-      setSidebarOpen(false);
-    }
-  }, [selectedConversation, isMobile]);
-
   const handleLeftPanelMouseEnter = () => {
     if (!isMobile) {
       setLeftPanelVisible(true);
@@ -39,6 +39,11 @@ export default function ChatLayout() {
     if (!isMobile) {
       setLeftPanelVisible(false);
     }
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -103,7 +108,7 @@ export default function ChatLayout() {
         }}>
 
         <div style={{ marginBottom: 16 }}>
-          <img src="/src/assets/logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="Orioneta" />
+          <img src={logoImage} style={{ width: 36, height: 36, objectFit: "contain" }} alt="Orioneta" />
         </div>
 
         <NavDivider />
@@ -134,10 +139,16 @@ export default function ChatLayout() {
 
         <div style={{ flex: 1 }} />
 
+        <NavIcon
+          tooltip="Cerrar sesion"
+          onClick={handleLogout}
+          icon={<LogOut size={19} />}
+        />
+
         <NavDivider />
 
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14, color: "white", fontWeight: 600, marginTop: 8 }}>
-          P
+        <div title={session?.email || "Sesion de Orioneta"} style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white", fontWeight: 600, marginTop: 8 }}>
+          {userInitial}
         </div>
       </nav>
 
