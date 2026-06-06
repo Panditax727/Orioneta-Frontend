@@ -80,6 +80,10 @@ export const theme = {
     xl: 16,
     full: 9999,
   },
+  shadow: {
+    primary: "0 4px 12px rgba(124, 58, 237, 0.3)",
+    secondary: "0 2px 8px rgba(0, 0, 0, 0.2)",
+  },
   breakpoints: {
     sm: 640,
     md: 768,
