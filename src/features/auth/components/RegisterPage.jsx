@@ -17,6 +17,7 @@ import {
   register,
 } from "../../../services/authService";
 import { saveSession } from "../session";
+import { ensureCurrentUserProfile } from "../../../services/userService";
 import AuthShell from "./AuthShell";
 import logoImage from "../../../assets/logo.png";
 
@@ -95,6 +96,12 @@ export default function RegisterPage() {
         password: form.password,
       });
       saveSession(session);
+      await ensureCurrentUserProfile({
+        displayName: form.displayName.trim(),
+        email: form.email.trim().toLowerCase(),
+      }).catch((error) => {
+        console.warn("No se pudo preparar el perfil publico:", error);
+      });
       navigate("/chat");
     } catch (error) {
       setApiError(error.message || "No se pudo crear la cuenta");

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Loader from "../../../shared/components/Loader";
+import { ensureCurrentUserProfile } from "../../../services/userService";
 import { saveSession } from "../session";
 
 function readOAuthParams() {
@@ -34,7 +35,11 @@ export default function OAuthCallbackPage() {
     }
 
     saveSession(oauthParams);
-    navigate("/chat", { replace: true });
+    ensureCurrentUserProfile({ email: oauthParams.email })
+      .catch((error) => {
+        console.warn("No se pudo preparar el perfil publico:", error);
+      })
+      .finally(() => navigate("/chat", { replace: true }));
   }, [navigate, oauthParams]);
 
   if (oauthParams.error || !oauthParams.accessToken) {

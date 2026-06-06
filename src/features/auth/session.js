@@ -1,4 +1,4 @@
-const SESSION_KEY = "orioneta.auth.session";
+export const SESSION_KEY = "orioneta.auth.session";
 
 function parseExpiresIn(value) {
   const seconds = Number(value);
@@ -19,6 +19,8 @@ export function normalizeAuthResponse(authResponse) {
     userId: authResponse.userId,
     email: authResponse.email,
     role: authResponse.role || "USER",
+    profileUserId: authResponse.profileUserId || authResponse.profile?.userID || null,
+    profile: authResponse.profile || null,
   };
 }
 
@@ -48,6 +50,33 @@ export function getSession() {
     clearSession();
     return null;
   }
+}
+
+export function updateSession(updates) {
+  const session = getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const nextSession = {
+    ...session,
+    ...updates,
+  };
+
+  localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+  return nextSession;
+}
+
+export function saveProfileInSession(profile) {
+  if (!profile) {
+    return getSession();
+  }
+
+  return updateSession({
+    profile,
+    profileUserId: profile.userID,
+  });
 }
 
 export function clearSession() {

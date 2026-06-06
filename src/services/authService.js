@@ -17,6 +17,7 @@ export function login(credentials) {
   return apiRequest("/api/auth/login", {
     method: "POST",
     body: credentials,
+    auth: false,
   });
 }
 
@@ -24,11 +25,12 @@ export function register(account) {
   return apiRequest("/api/auth/register", {
     method: "POST",
     body: account,
+    auth: false,
   });
 }
 
 export function getOAuthProviders() {
-  return apiRequest("/api/auth/oauth2/providers");
+  return apiRequest("/api/auth/oauth2/providers", { auth: false });
 }
 
 export function redirectToOAuth(providerId, providers = DEFAULT_OAUTH_PROVIDERS) {

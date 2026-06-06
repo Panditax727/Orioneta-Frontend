@@ -1,3 +1,5 @@
+import { getSession } from "../features/auth/session";
+
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080"
 ).replace(/\/$/, "");
@@ -25,10 +27,13 @@ export async function apiRequest(path, options = {}) {
     body,
     headers = {},
     token,
+    auth = true,
     signal,
   } = options;
 
   let response;
+  const session = auth ? getSession() : null;
+  const accessToken = token || session?.accessToken;
 
   try {
     response = await fetch(resolveApiUrl(path), {
@@ -37,7 +42,7 @@ export async function apiRequest(path, options = {}) {
       headers: {
         Accept: "application/json",
         ...(body ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
