@@ -36,13 +36,14 @@ const STATUS_LABELS = {
 
 function toUiProfile(profile) {
   const status = DOMAIN_TO_UI_STATUS[profile.status] || "offline";
+  const name = profile.displayName || profile.userName || profile.email || "Usuario";
 
   return {
     id: profile.userID,
     userID: profile.userID,
-    name: profile.displayName || profile.userName || profile.email,
+    name,
     userName: profile.userName,
-    avatar: profile.avatar,
+    avatar: name.trim().charAt(0).toUpperCase() || "O",
     email: profile.email,
     friendCode: profile.friendCode,
     status,

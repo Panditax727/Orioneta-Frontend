@@ -1,5 +1,14 @@
+import { ApiError, apiRequest } from "../../../services/apiClient";
+import {
+  ensureCurrentUserProfile,
+  findUserByEmail,
+  findUserByFriendCode,
+  findUserById,
+} from "../../../services/userService";
+
 const CHAT_STORAGE_KEY = "orioneta.chat.local-state";
 const CHAT_UPDATED_EVENT = "orioneta-chat-updated";
+const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
 
 const SEED_CONVERSATIONS = [
   {
@@ -50,6 +59,8 @@ const SEED_MESSAGES = {
     { id: "seed-message-4", sender: "Tu", content: "Ok perfecto, lo vemos manana entonces", time: "12:34", mine: true },
   ],
 };
+
+const userCache = new Map();
 
 function delay(ms = 120) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,20 +121,38 @@ function notifyChatUpdated() {
   window.dispatchEvent(new Event(CHAT_UPDATED_EVENT));
 }
 
-function normalizeConversation(input) {
-  const name = input.name?.trim() || input.displayName?.trim() || "Nuevo chat";
-  const id = String(input.id || input.friendId || createId("chat"));
+function isLocalConversation(conversationId) {
+  return String(conversationId || "").startsWith("seed-")
+    || String(conversationId || "").startsWith("chat-");
+}
 
-  return {
-    id,
-    friendId: input.friendId || input.id || null,
-    name,
-    avatar: input.avatar || name.charAt(0).toUpperCase(),
-    lastMessage: input.lastMessage || "Aun no hay mensajes",
-    time: input.time || "",
-    unread: Number(input.unread || 0),
-    online: Boolean(input.online),
-  };
+async function getCurrentProfileOrNull() {
+  try {
+    return await ensureCurrentUserProfile();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 0) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function getDisplayName(user) {
+  return user?.displayName || user?.userName || user?.email || "Usuario Orioneta";
+}
+
+function getAvatar(userOrName) {
+  const source = typeof userOrName === "string" ? userOrName : getDisplayName(userOrName);
+  return source.trim().charAt(0).toUpperCase() || "O";
+}
+
+function formatMessageTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function sortByLastActivity(conversations) {
@@ -134,11 +163,173 @@ function sortByLastActivity(conversations) {
   });
 }
 
+function normalizeLocalConversation(input) {
+  const name = input.name?.trim() || input.displayName?.trim() || "Nuevo chat";
+  const id = String(input.id || input.friendId || createId("chat"));
+
+  return {
+    id,
+    friendId: input.friendId || input.id || null,
+    name,
+    avatar: input.avatar || getAvatar(name),
+    lastMessage: input.lastMessage || "Aun no hay mensajes",
+    time: input.time || "",
+    unread: Number(input.unread || 0),
+    online: Boolean(input.online),
+    backend: false,
+  };
+}
+
+async function findUserCached(userId) {
+  if (!userId) {
+    return null;
+  }
+
+  const cacheKey = String(userId);
+  if (userCache.has(cacheKey)) {
+    return userCache.get(cacheKey);
+  }
+
+  try {
+    const user = await findUserById(userId);
+    userCache.set(cacheKey, user);
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+function getParticipantIds(conversation) {
+  return (conversation.participants || [])
+    .map((participant) => participant.userId)
+    .filter(Boolean);
+}
+
+function getOtherParticipantId(conversation, currentUserId) {
+  return getParticipantIds(conversation)
+    .find((participantId) => String(participantId) !== String(currentUserId));
+}
+
+async function fetchConversationMessages(conversationId) {
+  return apiRequest(`/api/messages/conversation/${conversationId}`);
+}
+
+async function normalizeBackendMessage(message, currentUserId) {
+  const mine = String(message.senderId) === String(currentUserId);
+  const sender = mine ? null : await findUserCached(message.senderId);
+
+  return {
+    id: message.id,
+    conversationId: message.conversationId,
+    senderId: message.senderId,
+    sender: mine ? "Tu" : getDisplayName(sender),
+    content: message.content,
+    type: message.type,
+    status: message.status,
+    time: formatMessageTime(message.createdAt),
+    mine,
+    createdAt: message.createdAt,
+  };
+}
+
+async function normalizeBackendMessages(messages, currentUserId) {
+  return Promise.all((messages || []).map((message) => normalizeBackendMessage(message, currentUserId)));
+}
+
+async function normalizeBackendConversation(conversation, currentProfile, messages = null) {
+  const currentUserId = currentProfile.userID;
+  const otherParticipantId = getOtherParticipantId(conversation, currentUserId);
+  const otherParticipant = await findUserCached(otherParticipantId);
+  const rawMessages = messages || [];
+  const lastMessage = rawMessages.at(-1);
+  const fallbackName = conversation.type === "PRIVATE_CHAT" ? "Chat privado" : "Grupo";
+  const name = conversation.name?.trim() || getDisplayName(otherParticipant) || fallbackName;
+  const status = otherParticipant?.status;
+
+  return {
+    id: conversation.id,
+    type: conversation.type,
+    friendId: otherParticipantId || null,
+    name,
+    avatar: getAvatar(otherParticipant || name),
+    lastMessage: lastMessage?.content || "Aun no hay mensajes",
+    time: formatMessageTime(lastMessage?.createdAt || conversation.updatedAt),
+    unread: 0,
+    online: status === "ONLINE",
+    participants: conversation.participants || [],
+    backend: true,
+  };
+}
+
+async function getBackendConversations(currentProfile) {
+  const home = await apiRequest(`/api/bff/home/${currentProfile.userID}`);
+  const conversations = home.conversations || [];
+
+  return Promise.all(conversations.map(async (conversation) => {
+    const messages = await fetchConversationMessages(conversation.id).catch(() => []);
+    return normalizeBackendConversation(conversation, currentProfile, messages);
+  }));
+}
+
+async function findExistingPrivateConversation(currentProfile, friendId) {
+  const conversations = await getBackendConversations(currentProfile);
+
+  return conversations.find((conversation) => (
+    conversation.type === "PRIVATE_CHAT" && String(conversation.friendId) === String(friendId)
+  ));
+}
+
+async function resolveConversationTarget(target) {
+  const normalizedTarget = target.trim();
+
+  if (!normalizedTarget) {
+    throw new ApiError("Ingresa un email, friend code o ID de usuario", 0);
+  }
+
+  if (normalizedTarget.includes("@")) {
+    return findUserByEmail(normalizedTarget.toLowerCase());
+  }
+
+  if (UUID_REGEX.test(normalizedTarget)) {
+    return findUserById(normalizedTarget);
+  }
+
+  return findUserByFriendCode(normalizedTarget.toUpperCase());
+}
+
+async function createBackendPrivateConversation(currentProfile, friendProfile) {
+  if (String(currentProfile.userID) === String(friendProfile.userID)) {
+    throw new ApiError("No puedes abrir un chat contigo mismo", 400);
+  }
+
+  const existingConversation = await findExistingPrivateConversation(currentProfile, friendProfile.userID);
+  if (existingConversation) {
+    return existingConversation;
+  }
+
+  const conversation = await apiRequest("/api/bff/chats", {
+    method: "POST",
+    body: {
+      type: "PRIVATE_CHAT",
+      name: "",
+      description: "",
+      participantIds: [currentProfile.userID, friendProfile.userID],
+    },
+  });
+
+  return normalizeBackendConversation(conversation, currentProfile, []);
+}
+
 export const chatService = {
   getDirectMessages: async () => {
-    await delay();
-    const state = readState();
-    return sortByLastActivity(state.conversations);
+    const currentProfile = await getCurrentProfileOrNull();
+
+    if (!currentProfile) {
+      await delay();
+      return sortByLastActivity(readState().conversations);
+    }
+
+    return sortByLastActivity(await getBackendConversations(currentProfile));
   },
 
   getChannels: async () => {
@@ -147,33 +338,66 @@ export const chatService = {
   },
 
   getUnreadConversations: async () => {
-    await delay();
-    return readState().conversations.filter((conversation) => conversation.unread > 0);
+    const currentProfile = await getCurrentProfileOrNull();
+
+    if (!currentProfile) {
+      await delay();
+      return readState().conversations.filter((conversation) => conversation.unread > 0);
+    }
+
+    return (await getBackendConversations(currentProfile)).filter((conversation) => conversation.unread > 0);
   },
 
   getMessages: async (conversationId) => {
-    await delay(80);
-    const state = readState();
-    return state.messages[String(conversationId)] || [];
+    if (isLocalConversation(conversationId)) {
+      await delay(80);
+      return readState().messages[String(conversationId)] || [];
+    }
+
+    const currentProfile = await ensureCurrentUserProfile();
+    const query = new URLSearchParams({ userId: currentProfile.userID });
+    const chatView = await apiRequest(`/api/bff/chats/${conversationId}?${query.toString()}`);
+
+    return normalizeBackendMessages(chatView.messages || [], currentProfile.userID);
   },
 
-  createDirectConversation: async ({ name }) => {
-    await delay();
-    const conversation = normalizeConversation({ name });
-    const state = readState();
+  createDirectConversation: async ({ name, target }) => {
+    const currentProfile = await getCurrentProfileOrNull();
+    const rawTarget = target || name || "";
 
-    state.conversations = [conversation, ...state.conversations];
-    state.messages[conversation.id] = [];
+    if (!currentProfile) {
+      await delay();
+      const conversation = normalizeLocalConversation({ name: rawTarget });
+      const state = readState();
 
-    writeState(state);
+      state.conversations = [conversation, ...state.conversations];
+      state.messages[conversation.id] = [];
+
+      writeState(state);
+      notifyChatUpdated();
+
+      return conversation;
+    }
+
+    const friendProfile = await resolveConversationTarget(rawTarget);
+    const conversation = await createBackendPrivateConversation(currentProfile, friendProfile);
     notifyChatUpdated();
 
     return conversation;
   },
 
   upsertDirectConversation: async (conversationInput) => {
+    const currentProfile = await getCurrentProfileOrNull();
+
+    if (currentProfile && conversationInput.friendId) {
+      const friendProfile = await findUserById(conversationInput.friendId);
+      const conversation = await createBackendPrivateConversation(currentProfile, friendProfile);
+      notifyChatUpdated();
+      return conversation;
+    }
+
     await delay(80);
-    const conversation = normalizeConversation(conversationInput);
+    const conversation = normalizeLocalConversation(conversationInput);
     const state = readState();
     const currentIndex = state.conversations.findIndex((item) => (
       item.id === conversation.id || item.friendId === conversation.friendId
@@ -198,53 +422,80 @@ export const chatService = {
   },
 
   sendMessage: async (conversationId, content) => {
-    await delay();
-    const id = String(conversationId);
-    const state = readState();
-    const newMessage = {
-      id: createId("message"),
-      sender: "Tu",
-      content,
-      time: nowTime(),
-      mine: true,
-    };
+    if (isLocalConversation(conversationId)) {
+      await delay();
+      const id = String(conversationId);
+      const state = readState();
+      const newMessage = {
+        id: createId("message"),
+        sender: "Tu",
+        content,
+        time: nowTime(),
+        mine: true,
+      };
 
-    if (!state.messages[id]) {
-      state.messages[id] = [];
+      if (!state.messages[id]) {
+        state.messages[id] = [];
+      }
+
+      state.messages[id].push(newMessage);
+      state.conversations = state.conversations.map((conversation) => (
+        conversation.id === id
+          ? { ...conversation, lastMessage: content, time: newMessage.time, unread: 0 }
+          : conversation
+      ));
+
+      writeState(state);
+      notifyChatUpdated();
+
+      return newMessage;
     }
 
-    state.messages[id].push(newMessage);
-    state.conversations = state.conversations.map((conversation) => (
-      conversation.id === id
-        ? { ...conversation, lastMessage: content, time: newMessage.time, unread: 0 }
-        : conversation
-    ));
+    const currentProfile = await ensureCurrentUserProfile();
+    const sentMessage = await apiRequest("/api/bff/chats/messages", {
+      method: "POST",
+      body: {
+        conversationId,
+        senderId: currentProfile.userID,
+        content,
+        type: "TEXT",
+      },
+    });
 
-    writeState(state);
     notifyChatUpdated();
 
-    return newMessage;
+    return normalizeBackendMessage(sentMessage, currentProfile.userID);
   },
 
   searchConversations: async (query, type = "all") => {
-    await delay(80);
-    const state = readState();
     const normalizedQuery = query.trim().toLowerCase();
-    const filterByName = (item) => item.name.toLowerCase().includes(normalizedQuery);
-    const dms = normalizedQuery
-      ? state.conversations.filter(filterByName)
-      : state.conversations;
-    const channels = normalizedQuery
-      ? state.channels.filter(filterByName)
-      : state.channels;
+
+    if (type === "channels") {
+      await delay(80);
+      const channels = readState().channels;
+      return {
+        dms: [],
+        channels: normalizedQuery
+          ? channels.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+          : channels,
+      };
+    }
+
+    const dms = await chatService.getDirectMessages();
 
     return {
-      dms: type === "channels" ? [] : dms,
-      channels: type === "dms" ? [] : channels,
+      dms: normalizedQuery
+        ? dms.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+        : dms,
+      channels: [],
     };
   },
 
   markAsRead: async (conversationId) => {
+    if (!isLocalConversation(conversationId)) {
+      return true;
+    }
+
     await delay(80);
     const id = String(conversationId);
     const state = readState();

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Paperclip, Smile, Send, Phone, Video, Search, MessageSquare } from "lucide-react";
 import { useChat } from "../hooks/useChat";
 
@@ -7,13 +7,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const [notice, setNotice] = useState("");
   const [messageSearch, setMessageSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const { messages, loading, error, sendMessage, fetchMessages } = useChat(conversation?.id);
-
-  useEffect(() => {
-    if (conversation?.id) {
-      fetchMessages();
-    }
-  }, [conversation?.id, fetchMessages]);
+  const { messages, loading, sending, error, sendMessage } = useChat(conversation?.id);
 
   const visibleMessages = useMemo(() => {
     if (!messageSearch.trim()) {
@@ -40,7 +34,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   }
 
   const handleSend = async () => {
-    if (!message.trim()) return;
+    if (!message.trim() || sending) return;
     try {
       await sendMessage(message);
       setMessage("");
@@ -91,7 +85,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           <div>
             <p style={{ color: "#c0caf5", fontSize: 14, fontWeight: 600, margin: 0 }}>{conversation.name}</p>
             <p style={{ color: "#22c55e", fontSize: 11, margin: 0 }}>
-              {conversation.online ? "En linea" : "Desconectado"}
+              {conversation.backend ? "Backend local" : conversation.online ? "En linea" : "Modo local"}
             </p>
           </div>
         </div>
@@ -196,8 +190,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           <button
             type="button"
             onClick={handleSend}
-            style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: message.trim() ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : "#1e2030", border: "none", cursor: message.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: message.trim() ? "white" : "#565f89", transition: "all 0.2s", boxShadow: message.trim() ? "0 4px 12px rgba(124, 58, 237, 0.3)" : "none" }}
-            onMouseEnter={e => { if (message.trim()) e.currentTarget.style.transform = "scale(1.05)"; }}
+            disabled={sending || !message.trim()}
+            title={sending ? "Enviando..." : "Enviar mensaje"}
+            style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: message.trim() && !sending ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : "#1e2030", border: "none", cursor: message.trim() && !sending ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: message.trim() && !sending ? "white" : "#565f89", transition: "all 0.2s", boxShadow: message.trim() && !sending ? "0 4px 12px rgba(124, 58, 237, 0.3)" : "none" }}
+            onMouseEnter={e => { if (message.trim() && !sending) e.currentTarget.style.transform = "scale(1.05)"; }}
             onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
           >
             <Send size={16} />

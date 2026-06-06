@@ -32,10 +32,10 @@ export function useConversations(type = "dms") {
     }
   }, [normalizedType]);
 
-  const createConversation = useCallback(async (name) => {
+  const createConversation = useCallback(async (target) => {
     try {
       setError(null);
-      const conversation = await chatService.createDirectConversation({ name });
+      const conversation = await chatService.createDirectConversation({ target });
       await fetchConversations();
       return conversation;
     } catch (err) {

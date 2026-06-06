@@ -12,6 +12,7 @@ export default function UserProfile({ profile, onUpdateStatus }) {
   const [isEditing, setIsEditing] = useState(false);
   const [customActivity, setCustomActivity] = useState(profile?.activity || "");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleStatusChange = async (status) => {
     try {
@@ -60,11 +61,13 @@ export default function UserProfile({ profile, onUpdateStatus }) {
         {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ color: "#c0caf5", fontSize: 15, fontWeight: 600 }}>
+            <span style={{ color: "#c0caf5", fontSize: 15, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {profile.name}
             </span>
-            <span style={{ color: "#565f89", fontSize: 11 }}>#{profile.id}</span>
           </div>
+          <p style={{ color: "#565f89", fontSize: 11, margin: "0 0 4px" }}>
+            @{profile.userName || "usuario"}
+          </p>
 
           {/* Status */}
           <div style={{ position: "relative" }}>
@@ -159,6 +162,9 @@ export default function UserProfile({ profile, onUpdateStatus }) {
         {/* Actions */}
         <div style={{ display: "flex", gap: 4 }}>
           <button
+            type="button"
+            title="Configuracion de perfil"
+            onClick={() => setShowSettings((current) => !current)}
             style={{
               width: 32,
               height: 32,
@@ -177,6 +183,8 @@ export default function UserProfile({ profile, onUpdateStatus }) {
             <Settings size={16} />
           </button>
           <button
+            type="button"
+            title="Cerrar sesion desde la barra lateral"
             style={{
               width: 32,
               height: 32,
@@ -196,6 +204,19 @@ export default function UserProfile({ profile, onUpdateStatus }) {
           </button>
         </div>
       </div>
+
+      {showSettings && (
+        <div style={{ marginTop: 12, padding: 12, background: "#10111a", border: "1px solid #1e2030", borderRadius: 10 }}>
+          <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 600, margin: "0 0 8px" }}>
+            Configuracion rapida
+          </p>
+          <ProfileSetting label="Friend code" value={profile.friendCode || "No disponible"} />
+          <ProfileSetting label="Email" value={profile.email || "No disponible"} />
+          <p style={{ color: "#565f89", fontSize: 11, margin: "8px 0 0" }}>
+            El ID interno se mantiene oculto porque solo sirve para integraciones tecnicas.
+          </p>
+        </div>
+      )}
 
       {/* Bio */}
       {profile.bio && (
@@ -284,6 +305,17 @@ export default function UserProfile({ profile, onUpdateStatus }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ProfileSetting({ label, value }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6 }}>
+      <span style={{ color: "#565f89", fontSize: 11 }}>{label}</span>
+      <span style={{ color: "#a78bfa", fontSize: 11, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>
+        {value}
+      </span>
     </div>
   );
 }

@@ -12,6 +12,7 @@ export default function Sidebar({
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatName, setNewChatName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [creationNotice, setCreationNotice] = useState("");
   const { conversations, loading, error, createConversation, markAsRead } = useConversations(activeSection);
 
   const filtered = conversations.filter((i) =>
@@ -38,12 +39,14 @@ export default function Sidebar({
 
     try {
       setCreating(true);
-      const conversation = await createConversation(newChatName);
+      setCreationNotice("");
+      const conversation = await createConversation(newChatName.trim());
       setNewChatName("");
       setNewChatOpen(false);
       onSelectConversation(conversation);
     } catch (err) {
       console.error("Error al crear chat:", err);
+      setCreationNotice(err.message || "No se pudo crear el chat");
     } finally {
       setCreating(false);
     }
@@ -105,46 +108,56 @@ export default function Sidebar({
         </div>
 
         {newChatOpen && (
-          <form onSubmit={handleCreateConversation} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input
-              autoFocus
-              type="text"
-              value={newChatName}
-              onChange={(event) => setNewChatName(event.target.value)}
-              placeholder="Nombre del chat"
-              disabled={creating}
-              style={{
-                minWidth: 0,
-                flex: 1,
-                padding: "8px 10px",
-                background: "#1a1b26",
-                border: "1px solid #1e2030",
-                borderRadius: 8,
-                color: "#c0caf5",
-                fontSize: 13,
-                outline: "none",
-              }}
-            />
-            <button
-              type="submit"
-              disabled={creating || !newChatName.trim()}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                background: newChatName.trim() ? "#7c3aed" : "#1e2030",
-                border: "none",
-                color: newChatName.trim() ? "white" : "#565f89",
-                cursor: newChatName.trim() ? "pointer" : "default",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Plus size={15} />
-            </button>
-          </form>
+          <div style={{ marginBottom: 12 }}>
+            <form onSubmit={handleCreateConversation} style={{ display: "flex", gap: 8 }}>
+              <input
+                autoFocus
+                type="text"
+                value={newChatName}
+                onChange={(event) => {
+                  setNewChatName(event.target.value);
+                  setCreationNotice("");
+                }}
+                placeholder="Friend code o email"
+                disabled={creating}
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  padding: "8px 10px",
+                  background: "#1a1b26",
+                  border: "1px solid #1e2030",
+                  borderRadius: 8,
+                  color: "#c0caf5",
+                  fontSize: 13,
+                  outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={creating || !newChatName.trim()}
+                title="Crear chat privado"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 8,
+                  background: newChatName.trim() ? "#7c3aed" : "#1e2030",
+                  border: "none",
+                  color: newChatName.trim() ? "white" : "#565f89",
+                  cursor: newChatName.trim() ? "pointer" : "default",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Plus size={15} />
+              </button>
+            </form>
+
+            <p style={{ color: creationNotice ? "#ef4444" : "#565f89", fontSize: 11, margin: "7px 0 0" }}>
+              {creationNotice || "Crea un chat privado con email o friend code."}
+            </p>
+          </div>
         )}
 
         {/* Search */}

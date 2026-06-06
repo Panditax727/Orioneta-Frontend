@@ -71,6 +71,19 @@ export default function FriendshipPanel({ onFriendClick, style }) {
     setNotice(copied ? "Friend code copiado" : "No se pudo copiar");
   };
 
+  const runRequestAction = async (action, successMessage) => {
+    try {
+      setBusy(true);
+      setNotice("");
+      await action();
+      setNotice(successMessage);
+    } catch (requestError) {
+      setNotice(requestError.message || "No se pudo actualizar la solicitud");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleOpenFriend = (friend) => {
     onFriendClick?.({
       id: friend.id,
@@ -104,7 +117,7 @@ export default function FriendshipPanel({ onFriendClick, style }) {
             <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 600, margin: 0 }}>
               Friend code
             </p>
-            <p style={{ color: "#565f89", fontSize: 12, margin: "2px 0 0" }}>
+            <p style={{ color: "#a78bfa", fontSize: 13, letterSpacing: 1.2, fontWeight: 700, margin: "2px 0 0" }}>
               {userProfile?.friendCode || "Preparando perfil..."}
             </p>
           </div>
@@ -151,8 +164,15 @@ export default function FriendshipPanel({ onFriendClick, style }) {
               key={request.id}
               label={requestUserName(request, "received")}
               detail="Quiere agregarte"
-              onAccept={() => acceptFriendRequest(request.id)}
-              onReject={() => rejectFriendRequest(request.id)}
+              disabled={busy}
+              onAccept={() => runRequestAction(
+                () => acceptFriendRequest(request.id),
+                "Solicitud aceptada",
+              )}
+              onReject={() => runRequestAction(
+                () => rejectFriendRequest(request.id),
+                "Solicitud rechazada",
+              )}
             />
           ))}
 
@@ -161,7 +181,11 @@ export default function FriendshipPanel({ onFriendClick, style }) {
               key={request.id}
               label={requestUserName(request, "sent")}
               detail="Solicitud enviada"
-              onCancel={() => cancelFriendRequest(request.id)}
+              disabled={busy}
+              onCancel={() => runRequestAction(
+                () => cancelFriendRequest(request.id),
+                "Solicitud cancelada",
+              )}
             />
           ))}
         </section>
@@ -180,7 +204,7 @@ export default function FriendshipPanel({ onFriendClick, style }) {
   );
 }
 
-function RequestRow({ label, detail, onAccept, onReject, onCancel }) {
+function RequestRow({ label, detail, disabled, onAccept, onReject, onCancel }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px", borderRadius: 8 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -193,17 +217,17 @@ function RequestRow({ label, detail, onAccept, onReject, onCancel }) {
       </div>
 
       {onAccept && (
-        <IconAction title="Aceptar" color="#22c55e" onClick={onAccept}>
+        <IconAction title="Aceptar" color="#22c55e" disabled={disabled} onClick={onAccept}>
           <Check size={14} />
         </IconAction>
       )}
       {onReject && (
-        <IconAction title="Rechazar" color="#ef4444" onClick={onReject}>
+        <IconAction title="Rechazar" color="#ef4444" disabled={disabled} onClick={onReject}>
           <X size={14} />
         </IconAction>
       )}
       {onCancel && (
-        <IconAction title="Cancelar" color="#ef4444" onClick={onCancel}>
+        <IconAction title="Cancelar" color="#ef4444" disabled={disabled} onClick={onCancel}>
           <X size={14} />
         </IconAction>
       )}
@@ -211,13 +235,14 @@ function RequestRow({ label, detail, onAccept, onReject, onCancel }) {
   );
 }
 
-function IconAction({ children, title, color, onClick }) {
+function IconAction({ children, title, color, disabled, onClick }) {
   return (
     <button
       type="button"
       title={title}
+      disabled={disabled}
       onClick={onClick}
-      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #1e2030", background: "#1a1b26", color, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #1e2030", background: "#1a1b26", color, display: "flex", alignItems: "center", justifyContent: "center", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1 }}
     >
       {children}
     </button>
