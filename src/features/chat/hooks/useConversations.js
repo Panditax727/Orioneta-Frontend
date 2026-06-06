@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { chatService } from "../services/chatService";
 
-export function useConversations(type = "dms") {
+export function useConversations() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10,26 +10,24 @@ export function useConversations(type = "dms") {
     try {
       setLoading(true);
       setError(null);
-      const data = type === "dms" 
-        ? await chatService.getDirectMessages()
-        : await chatService.getChannels();
+      const data = await chatService.getConversations();
       setConversations(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [type]);
+  }, []);
 
-  const searchConversations = useCallback(async (query) => {
+  const searchConversations = useCallback(async (query, filter = "all") => {
     try {
-      const results = await chatService.searchConversations(query, type);
-      return type === "dms" ? results.dms : results.channels;
+      const results = await chatService.searchConversations(query, filter);
+      return results;
     } catch (err) {
       setError(err.message);
       throw err;
     }
-  }, [type]);
+  }, []);
 
   const markAsRead = useCallback(async (conversationId) => {
     try {

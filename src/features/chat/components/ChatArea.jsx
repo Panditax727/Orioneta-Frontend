@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Paperclip, Smile, Send, Phone, Video, Search, MessageSquare } from "lucide-react";
+import { Paperclip, Smile, Send, Phone, Video, Search, MessageSquare, Info } from "lucide-react";
 import { useChat } from "../hooks/useChat";
 
-export default function ChatArea({ conversation, isMobile, onBack }) {
+export default function ChatArea({ conversation, isMobile, onBack, showDetails, onToggleDetails }) {
   const [message, setMessage] = useState("");
   const { messages, loading, sendMessage, fetchMessages } = useChat(conversation?.id);
 
@@ -45,6 +45,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     { icon: <Phone size={18} />, key: "phone" },
     { icon: <Video size={18} />, key: "video" },
     { icon: <Search size={18} />, key: "search" },
+    { icon: <Info size={18} />, key: "info", onClick: onToggleDetails },
   ];
 
   return (
@@ -75,9 +76,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
-          {headerActions.map(({ icon, key }) => (
+          {headerActions.map(({ icon, key, onClick }) => (
             <button
               key={key}
+              onClick={onClick}
               style={{ width: 34, height: 34, borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#565f89" }}
               onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#c0caf5"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#565f89"; }}
