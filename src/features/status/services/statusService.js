@@ -1,93 +1,157 @@
-// Servicio para manejar el estado y presencia de usuarios
-// Por ahora usa datos mockeados, luego se conectará con el backend
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  listFriends,
+  listReceivedRequests,
+  listSentRequests,
+  rejectFriendRequest,
+  removeFriend,
+  sendFriendRequest,
+} from "../../../services/friendshipService";
+import {
+  ensureCurrentUserProfile,
+  updateUserStatus,
+} from "../../../services/userService";
 
-const MOCK_FRIENDS = [
-  {
-    id: 1,
-    name: "OrionTheProgrammer",
-    avatar: "O",
-    status: "online",
-    activity: "Programando",
-    lastSeen: null,
-  },
-  {
-    id: 2,
-    name: "Flipper",
-    avatar: "F",
-    status: "idle",
-    activity: "Ausente",
-    lastSeen: "Hace 5 min",
-  },
-  {
-    id: 3,
-    name: "zBleend",
-    avatar: "Z",
-    status: "online",
-    activity: "Jugando",
-    lastSeen: null,
-  },
-  {
-    id: 4,
-    name: "DevMaster",
-    avatar: "D",
-    status: "offline",
-    activity: null,
-    lastSeen: "Hace 2 horas",
-  },
-  {
-    id: 5,
-    name: "CodeNinja",
-    avatar: "C",
-    status: "dnd",
-    activity: "No molestar",
-    lastSeen: null,
-  },
-];
-
-const MOCK_USER_PROFILE = {
-  id: 999,
-  name: "Panditax727",
-  avatar: "P",
-  email: "panditax@orioneta.com",
-  status: "online",
-  activity: "Disponible",
-  bio: "Desarrollador Full Stack 🚀",
-  joinedDate: "Enero 2025",
+const DOMAIN_TO_UI_STATUS = {
+  ONLINE: "online",
+  AWAY: "idle",
+  BUSY: "dnd",
+  OFFLINE: "offline",
 };
 
+const UI_TO_DOMAIN_STATUS = {
+  online: "ONLINE",
+  idle: "AWAY",
+  dnd: "BUSY",
+  offline: "OFFLINE",
+};
+
+const STATUS_LABELS = {
+  online: "En linea",
+  idle: "Ausente",
+  dnd: "No molestar",
+  offline: "Desconectado",
+};
+
+function toUiProfile(profile) {
+  const status = DOMAIN_TO_UI_STATUS[profile.status] || "offline";
+
+  return {
+    id: profile.userID,
+    userID: profile.userID,
+    name: profile.displayName || profile.userName || profile.email,
+    userName: profile.userName,
+    avatar: profile.avatar,
+    email: profile.email,
+    friendCode: profile.friendCode,
+    status,
+    activity: STATUS_LABELS[status],
+    bio: profile.bio,
+    profilePhoto: profile.profilePhoto,
+    joinedDate: profile.createdAt
+      ? new Date(profile.createdAt).toLocaleDateString()
+      : "",
+  };
+}
+
+function toUiFriend(enrichedFriendship) {
+  const friend = enrichedFriendship.friend;
+
+  if (!friend) {
+    return {
+      id: enrichedFriendship.friendId,
+      name: "Usuario no disponible",
+      avatar: "?",
+      status: "offline",
+      activity: "No disponible",
+      friendshipId: enrichedFriendship.id,
+      raw: enrichedFriendship,
+    };
+  }
+
+  return {
+    ...toUiProfile(friend),
+    id: friend.userID,
+    friendshipId: enrichedFriendship.id,
+    raw: enrichedFriendship,
+  };
+}
+
 export const statusService = {
-  // Obtener lista de amigos
   getFriends: async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_FRIENDS;
+    const profile = await ensureCurrentUserProfile();
+    const friendships = await listFriends(profile.userID);
+    return friendships.map(toUiFriend);
   },
 
-  // Obtener perfil del usuario actual
   getUserProfile: async () => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return MOCK_USER_PROFILE;
+    const profile = await ensureCurrentUserProfile();
+    return toUiProfile(profile);
   },
 
-  // Actualizar estado del usuario
-  updateUserStatus: async (status, activity) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    MOCK_USER_PROFILE.status = status;
-    MOCK_USER_PROFILE.activity = activity;
-    return MOCK_USER_PROFILE;
+  updateUserStatus: async (status) => {
+    const profile = await ensureCurrentUserProfile();
+    const updatedProfile = await updateUserStatus(
+      profile.userID,
+      UI_TO_DOMAIN_STATUS[status] || "OFFLINE",
+    );
+
+    return toUiProfile(updatedProfile);
   },
 
-  // Buscar amigos
   searchFriends: async (query) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    if (!query) return MOCK_FRIENDS;
-    return MOCK_FRIENDS.filter(friend =>
-      friend.name.toLowerCase().includes(query.toLowerCase())
+    const friends = await statusService.getFriends();
+
+    if (!query) {
+      return friends;
+    }
+
+    return friends.filter((friend) =>
+      friend.name.toLowerCase().includes(query.toLowerCase()),
     );
   },
 
-  // Obtener amigos por estado
   getFriendsByStatus: async (status) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return MOCK_FRIENDS.filter(friend => friend.status === status);
+    const friends = await statusService.getFriends();
+    return friends.filter((friend) => friend.status === status);
+  },
+
+  getFriendRequests: async () => {
+    const profile = await ensureCurrentUserProfile();
+    const [received, sent] = await Promise.all([
+      listReceivedRequests(profile.userID),
+      listSentRequests(profile.userID),
+    ]);
+
+    return { received, sent };
+  },
+
+  sendFriendRequest: async (target) => {
+    const profile = await ensureCurrentUserProfile();
+    return sendFriendRequest({
+      senderUserId: profile.userID,
+      target,
+    });
+  },
+
+  acceptFriendRequest: async (requestId) => {
+    const profile = await ensureCurrentUserProfile();
+    return acceptFriendRequest(requestId, profile.userID);
+  },
+
+  rejectFriendRequest: async (requestId) => {
+    const profile = await ensureCurrentUserProfile();
+    return rejectFriendRequest(requestId, profile.userID);
+  },
+
+  cancelFriendRequest: async (requestId) => {
+    const profile = await ensureCurrentUserProfile();
+    return cancelFriendRequest(requestId, profile.userID);
+  },
+
+  removeFriend: async (friendId) => {
+    const profile = await ensureCurrentUserProfile();
+    return removeFriend(profile.userID, friendId);
   },
 };

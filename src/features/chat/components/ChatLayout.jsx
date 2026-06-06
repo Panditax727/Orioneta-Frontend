@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
 import { clearSession, getSession } from "../../auth/session";
+import FriendshipPanel from "../../status/components/FriendshipPanel";
 import logoImage from "../../../assets/logo.png";
 
 export default function ChatLayout() {
@@ -121,9 +122,9 @@ export default function ChatLayout() {
         />
 
         <NavIcon
-          active={activeSection === "channels"}
-          onClick={() => setActiveSection("channels")}
-          tooltip="Canales"
+          active={activeSection === "friends"}
+          onClick={() => setActiveSection("friends")}
+          tooltip="Amigos"
           icon={<Users size={20} />}
         />
 
@@ -169,28 +170,51 @@ export default function ChatLayout() {
             />
           )}
           
-          <Sidebar
-            activeSection={activeSection}
-            selectedConversation={selectedConversation}
-            onSelectConversation={(conv) => {
-              setSelectedConversation(conv);
-              if (isMobile) setSidebarOpen(false);
-            }}
-            style={{
-              position: isMobile ? "fixed" : "relative",
-              left: isMobile ? 0 : "auto",
-              top: isMobile ? 0 : "auto",
-              height: isMobile ? "100vh" : "auto",
-              zIndex: isMobile ? 999 : "auto",
-              width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
-              opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
-              transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-              transition: isMobile 
-                ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease" 
-                : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
-              overflow: "hidden",
-            }}
-          />
+          {activeSection === "friends" ? (
+            <FriendshipPanel
+              onFriendClick={(friendConversation) => {
+                setSelectedConversation(friendConversation);
+                if (isMobile) setSidebarOpen(false);
+              }}
+              style={{
+                position: isMobile ? "fixed" : "relative",
+                left: isMobile ? 0 : "auto",
+                top: isMobile ? 0 : "auto",
+                height: isMobile ? "100vh" : "auto",
+                zIndex: isMobile ? 999 : "auto",
+                width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
+                opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
+                transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
+                transition: isMobile
+                  ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
+                  : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
+                overflow: "hidden",
+              }}
+            />
+          ) : (
+            <Sidebar
+              activeSection={activeSection}
+              selectedConversation={selectedConversation}
+              onSelectConversation={(conv) => {
+                setSelectedConversation(conv);
+                if (isMobile) setSidebarOpen(false);
+              }}
+              style={{
+                position: isMobile ? "fixed" : "relative",
+                left: isMobile ? 0 : "auto",
+                top: isMobile ? 0 : "auto",
+                height: isMobile ? "100vh" : "auto",
+                zIndex: isMobile ? 999 : "auto",
+                width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
+                opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
+                transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
+                transition: isMobile
+                  ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
+                  : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
+                overflow: "hidden",
+              }}
+            />
+          )}
         </>
       )}
 

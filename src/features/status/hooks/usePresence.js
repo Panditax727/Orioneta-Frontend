@@ -4,6 +4,7 @@ import { statusService } from "../services/statusService";
 export function usePresence() {
   const [friends, setFriends] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
+  const [requests, setRequests] = useState({ received: [], sent: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -12,12 +13,14 @@ export function usePresence() {
     try {
       setLoading(true);
       setError(null);
-      const [friendsData, profileData] = await Promise.all([
+      const profileData = await statusService.getUserProfile();
+      const [friendsData, requestsData] = await Promise.all([
         statusService.getFriends(),
-        statusService.getUserProfile(),
+        statusService.getFriendRequests(),
       ]);
       setFriends(friendsData);
       setUserProfile(profileData);
+      setRequests(requestsData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -37,6 +40,66 @@ export function usePresence() {
       throw err;
     }
   }, []);
+
+  const sendFriendRequest = useCallback(async (target) => {
+    try {
+      setError(null);
+      const request = await statusService.sendFriendRequest(target);
+      await fetchData();
+      return request;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchData]);
+
+  const acceptFriendRequest = useCallback(async (requestId) => {
+    try {
+      setError(null);
+      const friendship = await statusService.acceptFriendRequest(requestId);
+      await fetchData();
+      return friendship;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchData]);
+
+  const rejectFriendRequest = useCallback(async (requestId) => {
+    try {
+      setError(null);
+      const request = await statusService.rejectFriendRequest(requestId);
+      await fetchData();
+      return request;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchData]);
+
+  const cancelFriendRequest = useCallback(async (requestId) => {
+    try {
+      setError(null);
+      const request = await statusService.cancelFriendRequest(requestId);
+      await fetchData();
+      return request;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchData]);
+
+  const removeFriend = useCallback(async (friendId) => {
+    try {
+      setError(null);
+      const friendship = await statusService.removeFriend(friendId);
+      await fetchData();
+      return friendship;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchData]);
 
   // Buscar amigos
   const searchFriends = useCallback(async (query) => {
@@ -67,29 +130,18 @@ export function usePresence() {
     });
   }, [fetchData]);
 
-  // Simular actualizaciones de presencia en tiempo real
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Simular cambios de estado aleatorios
-      setFriends(prev => prev.map(friend => {
-        if (Math.random() > 0.95) {
-          const statuses = ["online", "idle", "dnd", "offline"];
-          const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
-          return { ...friend, status: newStatus };
-        }
-        return friend;
-      }));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   return {
     friends,
     userProfile,
+    requests,
     loading,
     error,
     updateStatus,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    cancelFriendRequest,
+    removeFriend,
     searchFriends,
     getFriendsByStatus,
     refetch: fetchData,
