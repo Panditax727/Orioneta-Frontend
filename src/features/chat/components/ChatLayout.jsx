@@ -82,9 +82,9 @@ export default function ChatLayout() {
             position: "absolute",
             left: 0,
             top: 0,
-            width: leftPanelVisible ? 344 : 20,
+            width: leftPanelVisible ? 344 : 40,
             height: "100%",
-            zIndex: 50,
+            zIndex: 1,
           }}
         />
       )}
@@ -106,7 +106,7 @@ export default function ChatLayout() {
         }}>
 
         <div style={{ marginBottom: 16 }}>
-          <img src="/src/assets/logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="Orioneta" />
+          <img src="/assets/logo.png" style={{ width: 36, height: 36, objectFit: "contain" }} alt="Orioneta" />
         </div>
 
         <NavDivider />
@@ -164,7 +164,6 @@ export default function ChatLayout() {
             style={{
               width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
               transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-              overflow: "hidden",
               flexShrink: 0,
             }}
           >
@@ -180,11 +179,11 @@ export default function ChatLayout() {
                 top: isMobile ? 0 : "auto",
                 height: isMobile ? "100vh" : "auto",
                 zIndex: isMobile ? 999 : "auto",
-                opacity: isMobile ? (sidebarOpen ? 1 : 0) : 1,
+                opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
                 transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
                 transition: isMobile 
                   ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)" 
-                  : "none",
+                  : "opacity 0.3s ease",
               }}
             />
           </div>
