@@ -5,7 +5,10 @@ import { FaGithub, FaGoogle } from "react-icons/fa";
 import Button from "../../../shared/components/Button";
 import Input from "../../../shared/components/Input";
 import Loader from "../../../shared/components/Loader";
-import { validateEmail } from "../../../shared/utils/validators";
+import {
+  validateEmail,
+  validateRequiredPassword,
+} from "../../../shared/utils/validators";
 import {
   DEFAULT_OAUTH_PROVIDERS,
   getOAuthProviders,
@@ -85,7 +88,7 @@ export default function LoginPage() {
   const validateForm = () => {
     const nextErrors = {
       email: validateEmail(form.email),
-      password: form.password ? null : "La contrasena es requerida",
+      password: validateRequiredPassword(form.password),
     };
 
     setErrors(nextErrors);
@@ -103,7 +106,10 @@ export default function LoginPage() {
     setApiError("");
 
     try {
-      const session = await login(form);
+      const session = await login({
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+      });
       saveSession(session);
       navigate("/chat");
     } catch (error) {
@@ -164,6 +170,7 @@ export default function LoginPage() {
           error={errors.email}
           disabled={loading}
           autoComplete="email"
+          maxLength={120}
           icon={<span style={{ color: "#565f89", fontSize: 14 }}>✉</span>}
         />
 
@@ -177,6 +184,7 @@ export default function LoginPage() {
           error={errors.password}
           disabled={loading}
           autoComplete="current-password"
+          maxLength={120}
           icon={<span style={{ fontSize: 13 }}>✦</span>}
           rightElement={
             <button

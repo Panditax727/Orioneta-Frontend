@@ -89,7 +89,11 @@ export default function RegisterPage() {
     setApiError("");
 
     try {
-      const session = await register(form);
+      const session = await register({
+        displayName: form.displayName.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+      });
       saveSession(session);
       navigate("/chat");
     } catch (error) {
@@ -140,6 +144,7 @@ export default function RegisterPage() {
           error={errors.displayName}
           disabled={loading}
           autoComplete="name"
+          maxLength={80}
           icon={<span style={{ color: "#565f89", fontSize: 14 }}>@</span>}
         />
 
@@ -153,6 +158,7 @@ export default function RegisterPage() {
           error={errors.email}
           disabled={loading}
           autoComplete="email"
+          maxLength={120}
           icon={<span style={{ fontSize: 15 }}>✉</span>}
         />
 
@@ -166,6 +172,7 @@ export default function RegisterPage() {
           error={errors.password}
           disabled={loading}
           autoComplete="new-password"
+          maxLength={120}
           icon={<span style={{ fontSize: 13 }}>✦</span>}
           rightElement={
             <button
