@@ -1,16 +1,31 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Paperclip, Smile, Send, Phone, Video, Search, MessageSquare } from "lucide-react";
 import { useChat } from "../hooks/useChat";
 
 export default function ChatArea({ conversation, isMobile, onBack }) {
   const [message, setMessage] = useState("");
-  const { messages, loading, sendMessage, fetchMessages } = useChat(conversation?.id);
+  const [notice, setNotice] = useState("");
+  const [messageSearch, setMessageSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { messages, loading, error, sendMessage, fetchMessages } = useChat(conversation?.id);
 
   useEffect(() => {
     if (conversation?.id) {
       fetchMessages();
     }
   }, [conversation?.id, fetchMessages]);
+
+  const visibleMessages = useMemo(() => {
+    if (!messageSearch.trim()) {
+      return messages;
+    }
+
+    const normalizedSearch = messageSearch.trim().toLowerCase();
+    return messages.filter((item) => (
+      item.content.toLowerCase().includes(normalizedSearch)
+      || item.sender.toLowerCase().includes(normalizedSearch)
+    ));
+  }, [messageSearch, messages]);
 
   if (!conversation) {
     return (
@@ -29,8 +44,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     try {
       await sendMessage(message);
       setMessage("");
+      setNotice("");
     } catch (err) {
       console.error("Error al enviar mensaje:", err);
+      setNotice("No se pudo enviar el mensaje");
     }
   };
 
@@ -41,10 +58,15 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     }
   };
 
+  const showTemporaryNotice = (text) => {
+    setNotice(text);
+    window.setTimeout(() => setNotice(""), 2600);
+  };
+
   const headerActions = [
-    { icon: <Phone size={18} />, key: "phone" },
-    { icon: <Video size={18} />, key: "video" },
-    { icon: <Search size={18} />, key: "search" },
+    { icon: <Phone size={18} />, key: "phone", title: "Llamada", onClick: () => showTemporaryNotice("Las llamadas se activaran cuando realtime-service este integrado") },
+    { icon: <Video size={18} />, key: "video", title: "Video", onClick: () => showTemporaryNotice("Las videollamadas quedaran para una siguiente iteracion") },
+    { icon: <Search size={18} />, key: "search", title: "Buscar mensajes", onClick: () => setSearchOpen((current) => !current) },
   ];
 
   return (
@@ -75,9 +97,12 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
-          {headerActions.map(({ icon, key }) => (
+          {headerActions.map(({ icon, key, title, onClick }) => (
             <button
               key={key}
+              type="button"
+              title={title}
+              onClick={onClick}
               style={{ width: 34, height: 34, borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#565f89" }}
               onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#c0caf5"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#565f89"; }}
@@ -87,6 +112,29 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           ))}
         </div>
       </div>
+
+      {(searchOpen || notice || error) && (
+        <div style={{ padding: searchOpen ? "10px 20px" : "8px 20px", borderBottom: "1px solid #1e2030", background: "#0d0e14" }}>
+          {searchOpen && (
+            <div style={{ position: "relative" }}>
+              <Search size={14} color="#565f89" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                autoFocus
+                value={messageSearch}
+                onChange={(event) => setMessageSearch(event.target.value)}
+                placeholder="Buscar dentro de esta conversacion"
+                style={{ width: "100%", padding: "9px 12px 9px 32px", background: "#13141c", border: "1px solid #1e2030", borderRadius: 10, color: "#c0caf5", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+          )}
+
+          {(notice || error) && (
+            <p style={{ color: error ? "#ef4444" : "#a78bfa", fontSize: 12, textAlign: "center", margin: searchOpen ? "8px 0 0" : 0 }}>
+              {error || notice}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Mensajes */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -98,8 +146,12 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
             <span style={{ color: "#565f89" }}>No hay mensajes aún</span>
           </div>
+        ) : visibleMessages.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <span style={{ color: "#565f89" }}>No hay mensajes que coincidan</span>
+          </div>
         ) : (
-          messages.map(msg => (
+          visibleMessages.map(msg => (
             <MessageBubble key={msg.id} msg={msg} />
           ))
         )}
@@ -113,6 +165,8 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
              tabIndex={-1}>
 
           <button
+            type="button"
+            onClick={() => showTemporaryNotice("Los archivos se conectaran cuando media-service este disponible")}
             style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "6px", borderRadius: 8, transition: "all 0.15s", flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#a78bfa"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#565f89"; }}
@@ -130,6 +184,8 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           />
 
           <button
+            type="button"
+            onClick={() => showTemporaryNotice("Selector de emojis pendiente para la siguiente mejora visual")}
             style={{ background: "none", border: "none", cursor: "pointer", color: "#565f89", padding: "6px", borderRadius: 8, transition: "all 0.15s", flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.background = "#1a1b26"; e.currentTarget.style.color = "#a78bfa"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#565f89"; }}
@@ -138,6 +194,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           </button>
 
           <button
+            type="button"
             onClick={handleSend}
             style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: message.trim() ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : "#1e2030", border: "none", cursor: message.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: message.trim() ? "white" : "#565f89", transition: "all 0.2s", boxShadow: message.trim() ? "0 4px 12px rgba(124, 58, 237, 0.3)" : "none" }}
             onMouseEnter={e => { if (message.trim()) e.currentTarget.style.transform = "scale(1.05)"; }}

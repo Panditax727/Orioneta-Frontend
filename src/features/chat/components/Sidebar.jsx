@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Plus, X } from "lucide-react";
 import { useConversations } from "../hooks/useConversations";
 
 export default function Sidebar({
@@ -8,7 +9,10 @@ export default function Sidebar({
   style,
 }) {
   const [search, setSearch] = useState("");
-  const { conversations, loading, error, markAsRead } = useConversations(activeSection);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatName, setNewChatName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const { conversations, loading, error, createConversation, markAsRead } = useConversations(activeSection);
 
   const filtered = conversations.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()),
@@ -22,6 +26,26 @@ export default function Sidebar({
       } catch (err) {
         console.error("Error al marcar como leído:", err);
       }
+    }
+  };
+
+  const handleCreateConversation = async (event) => {
+    event.preventDefault();
+
+    if (!newChatName.trim()) {
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const conversation = await createConversation(newChatName);
+      setNewChatName("");
+      setNewChatOpen(false);
+      onSelectConversation(conversation);
+    } catch (err) {
+      console.error("Error al crear chat:", err);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -60,6 +84,9 @@ export default function Sidebar({
             {activeSection === "chats" ? "Mensajes" : "Canales"}
           </h2>
           <button
+            type="button"
+            onClick={() => setNewChatOpen((current) => !current)}
+            title={newChatOpen ? "Cerrar" : "Nuevo chat"}
             style={{
               width: 28,
               height: 28,
@@ -70,21 +97,55 @@ export default function Sidebar({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#565f89",
+              color: newChatOpen ? "#c0caf5" : "#565f89",
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            {newChatOpen ? <X size={14} /> : <Plus size={14} />}
           </button>
         </div>
+
+        {newChatOpen && (
+          <form onSubmit={handleCreateConversation} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input
+              autoFocus
+              type="text"
+              value={newChatName}
+              onChange={(event) => setNewChatName(event.target.value)}
+              placeholder="Nombre del chat"
+              disabled={creating}
+              style={{
+                minWidth: 0,
+                flex: 1,
+                padding: "8px 10px",
+                background: "#1a1b26",
+                border: "1px solid #1e2030",
+                borderRadius: 8,
+                color: "#c0caf5",
+                fontSize: 13,
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={creating || !newChatName.trim()}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                background: newChatName.trim() ? "#7c3aed" : "#1e2030",
+                border: "none",
+                color: newChatName.trim() ? "white" : "#565f89",
+                cursor: newChatName.trim() ? "pointer" : "default",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Plus size={15} />
+            </button>
+          </form>
+        )}
 
         {/* Search */}
         <div style={{ position: "relative" }}>

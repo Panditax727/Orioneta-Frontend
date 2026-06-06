@@ -5,12 +5,13 @@ export function useConversations(type = "dms") {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const normalizedType = type === "chats" ? "dms" : type;
 
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = type === "dms" 
+      const data = normalizedType === "dms"
         ? await chatService.getDirectMessages()
         : await chatService.getChannels();
       setConversations(data);
@@ -19,17 +20,29 @@ export function useConversations(type = "dms") {
     } finally {
       setLoading(false);
     }
-  }, [type]);
+  }, [normalizedType]);
 
   const searchConversations = useCallback(async (query) => {
     try {
-      const results = await chatService.searchConversations(query, type);
-      return type === "dms" ? results.dms : results.channels;
+      const results = await chatService.searchConversations(query, normalizedType);
+      return normalizedType === "dms" ? results.dms : results.channels;
     } catch (err) {
       setError(err.message);
       throw err;
     }
-  }, [type]);
+  }, [normalizedType]);
+
+  const createConversation = useCallback(async (name) => {
+    try {
+      setError(null);
+      const conversation = await chatService.createDirectConversation({ name });
+      await fetchConversations();
+      return conversation;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, [fetchConversations]);
 
   const markAsRead = useCallback(async (conversationId) => {
     try {
@@ -51,11 +64,16 @@ export function useConversations(type = "dms") {
     });
   }, [fetchConversations]);
 
+  useEffect(() => chatService.subscribe(() => {
+    void fetchConversations();
+  }), [fetchConversations]);
+
   return {
     conversations,
     loading,
     error,
     searchConversations,
+    createConversation,
     markAsRead,
     refetch: fetchConversations,
   };

@@ -1,18 +1,18 @@
-// Servicio para manejar la lógica de chat y conversaciones
-// Por ahora usa datos mockeados, luego se conectará con el backend
+const CHAT_STORAGE_KEY = "orioneta.chat.local-state";
+const CHAT_UPDATED_EVENT = "orioneta-chat-updated";
 
-const MOCK_DMS = [
+const SEED_CONVERSATIONS = [
   {
-    id: 1,
+    id: "seed-orion",
     name: "OrionTheProgrammer",
     avatar: "O",
-    lastMessage: "Dale, lo veo mañana",
+    lastMessage: "Dale, lo veo manana",
     time: "12:34",
     unread: 2,
     online: true,
   },
   {
-    id: 2,
+    id: "seed-flipper",
     name: "Flipper",
     avatar: "F",
     lastMessage: "Nos vemos?",
@@ -21,7 +21,7 @@ const MOCK_DMS = [
     online: false,
   },
   {
-    id: 3,
+    id: "seed-zbleend",
     name: "zBleend",
     avatar: "Z",
     lastMessage: "Ok gracias!",
@@ -31,117 +31,239 @@ const MOCK_DMS = [
   },
 ];
 
-const MOCK_CHANNELS = [
+const SEED_CHANNELS = [
   {
-    id: 10,
+    id: "seed-channel-general",
     name: "general",
     lastMessage: "Bienvenidos al canal",
     time: "10:00",
     unread: 5,
     members: 12,
   },
-  {
-    id: 11,
-    name: "desarrollo",
-    lastMessage: "Merge aprobado",
-    time: "08:45",
-    unread: 0,
-    members: 4,
-  },
-  {
-    id: 12,
-    name: "gaming",
-    lastMessage: "Quien quiere jugar?",
-    time: "ayer",
-    unread: 3,
-    members: 8,
-  },
 ];
 
-const MOCK_MESSAGES = {
-  1: [
-    { id: 1, sender: "OrionTheProgrammer", content: "Oye ya terminaste el conversation-service?", time: "12:20", mine: false },
-    { id: 2, sender: "Tu", content: "Casi, me falta la infraestructura", time: "12:21", mine: true },
-    { id: 3, sender: "OrionTheProgrammer", content: "Dale, yo voy con el user-service", time: "12:22", mine: false },
-    { id: 4, sender: "Tu", content: "Ok perfecto, lo vemos mañana entonces", time: "12:34", mine: true },
+const SEED_MESSAGES = {
+  "seed-orion": [
+    { id: "seed-message-1", sender: "OrionTheProgrammer", content: "Oye ya terminaste el conversation-service?", time: "12:20", mine: false },
+    { id: "seed-message-2", sender: "Tu", content: "Casi, me falta la infraestructura", time: "12:21", mine: true },
+    { id: "seed-message-3", sender: "OrionTheProgrammer", content: "Dale, yo voy con el user-service", time: "12:22", mine: false },
+    { id: "seed-message-4", sender: "Tu", content: "Ok perfecto, lo vemos manana entonces", time: "12:34", mine: true },
   ],
 };
 
+function delay(ms = 120) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createId(prefix) {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function nowTime() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function createInitialState() {
+  return {
+    conversations: clone(SEED_CONVERSATIONS),
+    channels: clone(SEED_CHANNELS),
+    messages: clone(SEED_MESSAGES),
+  };
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function readState() {
+  const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+
+  if (!stored) {
+    const initialState = createInitialState();
+    writeState(initialState);
+    return initialState;
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    return {
+      conversations: parsed.conversations || [],
+      channels: parsed.channels || [],
+      messages: parsed.messages || {},
+    };
+  } catch {
+    const initialState = createInitialState();
+    writeState(initialState);
+    return initialState;
+  }
+}
+
+function writeState(state) {
+  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(state));
+}
+
+function notifyChatUpdated() {
+  window.dispatchEvent(new Event(CHAT_UPDATED_EVENT));
+}
+
+function normalizeConversation(input) {
+  const name = input.name?.trim() || input.displayName?.trim() || "Nuevo chat";
+  const id = String(input.id || input.friendId || createId("chat"));
+
+  return {
+    id,
+    friendId: input.friendId || input.id || null,
+    name,
+    avatar: input.avatar || name.charAt(0).toUpperCase(),
+    lastMessage: input.lastMessage || "Aun no hay mensajes",
+    time: input.time || "",
+    unread: Number(input.unread || 0),
+    online: Boolean(input.online),
+  };
+}
+
+function sortByLastActivity(conversations) {
+  return [...conversations].sort((a, b) => {
+    if (!a.time && b.time) return 1;
+    if (a.time && !b.time) return -1;
+    return 0;
+  });
+}
+
 export const chatService = {
-  // Obtener conversaciones directas (DMs)
   getDirectMessages: async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_DMS;
+    await delay();
+    const state = readState();
+    return sortByLastActivity(state.conversations);
   },
 
-  // Obtener canales
   getChannels: async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_CHANNELS;
+    await delay();
+    return readState().channels;
   },
 
-  // Obtener mensajes de una conversación
+  getUnreadConversations: async () => {
+    await delay();
+    return readState().conversations.filter((conversation) => conversation.unread > 0);
+  },
+
   getMessages: async (conversationId) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return MOCK_MESSAGES[conversationId] || [];
+    await delay(80);
+    const state = readState();
+    return state.messages[String(conversationId)] || [];
   },
 
-  // Enviar mensaje
+  createDirectConversation: async ({ name }) => {
+    await delay();
+    const conversation = normalizeConversation({ name });
+    const state = readState();
+
+    state.conversations = [conversation, ...state.conversations];
+    state.messages[conversation.id] = [];
+
+    writeState(state);
+    notifyChatUpdated();
+
+    return conversation;
+  },
+
+  upsertDirectConversation: async (conversationInput) => {
+    await delay(80);
+    const conversation = normalizeConversation(conversationInput);
+    const state = readState();
+    const currentIndex = state.conversations.findIndex((item) => (
+      item.id === conversation.id || item.friendId === conversation.friendId
+    ));
+
+    if (currentIndex >= 0) {
+      state.conversations[currentIndex] = {
+        ...state.conversations[currentIndex],
+        ...conversation,
+        lastMessage: state.conversations[currentIndex].lastMessage || conversation.lastMessage,
+        time: state.conversations[currentIndex].time || conversation.time,
+      };
+    } else {
+      state.conversations = [conversation, ...state.conversations];
+      state.messages[conversation.id] = [];
+    }
+
+    writeState(state);
+    notifyChatUpdated();
+
+    return currentIndex >= 0 ? state.conversations[currentIndex] : conversation;
+  },
+
   sendMessage: async (conversationId, content) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await delay();
+    const id = String(conversationId);
+    const state = readState();
     const newMessage = {
-      id: Date.now(),
+      id: createId("message"),
       sender: "Tu",
       content,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: nowTime(),
       mine: true,
     };
-    
-    if (!MOCK_MESSAGES[conversationId]) {
-      MOCK_MESSAGES[conversationId] = [];
+
+    if (!state.messages[id]) {
+      state.messages[id] = [];
     }
-    MOCK_MESSAGES[conversationId].push(newMessage);
-    
-    // Actualizar lastMessage en la conversación
-    const dmIndex = MOCK_DMS.findIndex(dm => dm.id === conversationId);
-    if (dmIndex !== -1) {
-      MOCK_DMS[dmIndex].lastMessage = content;
-      MOCK_DMS[dmIndex].time = newMessage.time;
-    }
-    
+
+    state.messages[id].push(newMessage);
+    state.conversations = state.conversations.map((conversation) => (
+      conversation.id === id
+        ? { ...conversation, lastMessage: content, time: newMessage.time, unread: 0 }
+        : conversation
+    ));
+
+    writeState(state);
+    notifyChatUpdated();
+
     return newMessage;
   },
 
-  // Buscar conversaciones
   searchConversations: async (query, type = "all") => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    if (!query) return { dms: MOCK_DMS, channels: MOCK_CHANNELS };
-    
-    const filteredDMs = MOCK_DMS.filter(dm =>
-      dm.name.toLowerCase().includes(query.toLowerCase())
-    );
-    
-    const filteredChannels = MOCK_CHANNELS.filter(channel =>
-      channel.name.toLowerCase().includes(query.toLowerCase())
-    );
-    
+    await delay(80);
+    const state = readState();
+    const normalizedQuery = query.trim().toLowerCase();
+    const filterByName = (item) => item.name.toLowerCase().includes(normalizedQuery);
+    const dms = normalizedQuery
+      ? state.conversations.filter(filterByName)
+      : state.conversations;
+    const channels = normalizedQuery
+      ? state.channels.filter(filterByName)
+      : state.channels;
+
     return {
-      dms: type === "channels" ? [] : filteredDMs,
-      channels: type === "dms" ? [] : filteredChannels,
+      dms: type === "channels" ? [] : dms,
+      channels: type === "dms" ? [] : channels,
     };
   },
 
-  // Marcar conversación como leída
   markAsRead: async (conversationId) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const dmIndex = MOCK_DMS.findIndex(dm => dm.id === conversationId);
-    if (dmIndex !== -1) {
-      MOCK_DMS[dmIndex].unread = 0;
-    }
-    const channelIndex = MOCK_CHANNELS.findIndex(ch => ch.id === conversationId);
-    if (channelIndex !== -1) {
-      MOCK_CHANNELS[channelIndex].unread = 0;
-    }
+    await delay(80);
+    const id = String(conversationId);
+    const state = readState();
+
+    state.conversations = state.conversations.map((conversation) => (
+      conversation.id === id ? { ...conversation, unread: 0 } : conversation
+    ));
+    state.channels = state.channels.map((channel) => (
+      channel.id === id ? { ...channel, unread: 0 } : channel
+    ));
+
+    writeState(state);
+    notifyChatUpdated();
+
     return true;
+  },
+
+  subscribe: (callback) => {
+    window.addEventListener(CHAT_UPDATED_EVENT, callback);
+    return () => window.removeEventListener(CHAT_UPDATED_EVENT, callback);
   },
 };

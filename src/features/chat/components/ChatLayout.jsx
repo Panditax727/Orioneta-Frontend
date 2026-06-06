@@ -3,6 +3,8 @@ import { Bell, LogOut, Menu, MessageSquare, Search, Users, X } from "lucide-reac
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
+import ChatUtilityPanel from "./ChatUtilityPanel";
+import { chatService } from "../services/chatService";
 import { clearSession, getSession } from "../../auth/session";
 import FriendshipPanel from "../../status/components/FriendshipPanel";
 import logoImage from "../../../assets/logo.png";
@@ -13,9 +15,24 @@ export default function ChatLayout() {
   const [activeSection, setActiveSection] = useState("chats");
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [leftPanelVisible, setLeftPanelVisible] = useState(false);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const session = getSession();
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
+  const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
+  const panelStyle = {
+    position: isMobile ? "fixed" : "relative",
+    left: isMobile ? 0 : "auto",
+    top: isMobile ? 0 : "auto",
+    height: isMobile ? "100vh" : "auto",
+    zIndex: isMobile ? 999 : "auto",
+    width: isMobile ? "100%" : panelVisible ? "280px" : "0px",
+    opacity: panelVisible ? 1 : 0,
+    transform: isMobile ? (panelVisible ? "translateX(0)" : "translateX(-100%)") : "none",
+    transition: isMobile
+      ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
+      : "width 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease",
+    overflow: "hidden",
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -30,21 +47,26 @@ export default function ChatLayout() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const handleLeftPanelMouseEnter = () => {
-    if (!isMobile) {
-      setLeftPanelVisible(true);
+  const handleSectionChange = (section) => {
+    setActiveSection(section);
+    if (isMobile) {
+      setSidebarOpen(true);
+      return;
     }
-  };
 
-  const handleLeftPanelMouseLeave = () => {
-    if (!isMobile) {
-      setLeftPanelVisible(false);
-    }
+    setLeftPanelCollapsed(false);
   };
 
   const handleLogout = () => {
     clearSession();
     navigate("/login", { replace: true });
+  };
+
+  const handleFriendConversation = async (friendConversation) => {
+    const conversation = await chatService.upsertDirectConversation(friendConversation);
+    setSelectedConversation(conversation);
+    setActiveSection("chats");
+    if (isMobile) setSidebarOpen(false);
   };
 
   return (
@@ -76,35 +98,19 @@ export default function ChatLayout() {
         </button>
       )}
 
-      {/* Left panel hover detection area */}
-      {!isMobile && (
-        <div
-          onMouseEnter={handleLeftPanelMouseEnter}
-          onMouseLeave={handleLeftPanelMouseLeave}
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            width: leftPanelVisible ? 344 : 20,
-            height: "100%",
-            zIndex: 50,
-          }}
-        />
-      )}
-
       {/* Navigation - hidden on mobile when sidebar is open */}
       <nav 
         style={{ 
-          width: isMobile ? 0 : leftPanelVisible ? 64 : 0, 
+          width: isMobile ? 0 : 64,
           flexShrink: 0, 
           background: "#0d0e14", 
-          borderRight: leftPanelVisible ? "1px solid #1e2030" : "none", 
+          borderRight: isMobile ? "none" : "1px solid #1e2030", 
           display: isMobile ? "none" : "flex", 
           flexDirection: "column", 
           alignItems: "center", 
-          padding: leftPanelVisible ? "16px 0" : "0", 
+          padding: "16px 0",
           gap: 8,
-          transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease, border-color 0.3s ease",
+          transition: "width 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s ease, border-color 0.2s ease",
           overflow: "hidden",
         }}>
 
@@ -115,25 +121,38 @@ export default function ChatLayout() {
         <NavDivider />
 
         <NavIcon
+          active={!leftPanelCollapsed}
+          onClick={() => setLeftPanelCollapsed((current) => !current)}
+          tooltip={leftPanelCollapsed ? "Mostrar panel" : "Ocultar panel"}
+          icon={<Menu size={20} />}
+        />
+
+        <NavDivider />
+
+        <NavIcon
           active={activeSection === "chats"}
-          onClick={() => setActiveSection("chats")}
+          onClick={() => handleSectionChange("chats")}
           tooltip="Mensajes directos"
           icon={<MessageSquare size={20} />}
         />
 
         <NavIcon
           active={activeSection === "friends"}
-          onClick={() => setActiveSection("friends")}
+          onClick={() => handleSectionChange("friends")}
           tooltip="Amigos"
           icon={<Users size={20} />}
         />
 
         <NavIcon
+          active={activeSection === "search"}
+          onClick={() => handleSectionChange("search")}
           tooltip="Buscar"
           icon={<Search size={20} />}
         />
 
         <NavIcon
+          active={activeSection === "notifications"}
+          onClick={() => handleSectionChange("notifications")}
           tooltip="Notificaciones"
           icon={<Bell size={20} />}
         />
@@ -172,24 +191,18 @@ export default function ChatLayout() {
           
           {activeSection === "friends" ? (
             <FriendshipPanel
-              onFriendClick={(friendConversation) => {
-                setSelectedConversation(friendConversation);
+              onFriendClick={handleFriendConversation}
+              style={panelStyle}
+            />
+          ) : activeSection === "search" || activeSection === "notifications" ? (
+            <ChatUtilityPanel
+              mode={activeSection}
+              onSelectConversation={(conv) => {
+                setSelectedConversation(conv);
+                setActiveSection("chats");
                 if (isMobile) setSidebarOpen(false);
               }}
-              style={{
-                position: isMobile ? "fixed" : "relative",
-                left: isMobile ? 0 : "auto",
-                top: isMobile ? 0 : "auto",
-                height: isMobile ? "100vh" : "auto",
-                zIndex: isMobile ? 999 : "auto",
-                width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
-                opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
-                transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-                transition: isMobile
-                  ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
-                  : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
-                overflow: "hidden",
-              }}
+              style={panelStyle}
             />
           ) : (
             <Sidebar
@@ -199,27 +212,15 @@ export default function ChatLayout() {
                 setSelectedConversation(conv);
                 if (isMobile) setSidebarOpen(false);
               }}
-              style={{
-                position: isMobile ? "fixed" : "relative",
-                left: isMobile ? 0 : "auto",
-                top: isMobile ? 0 : "auto",
-                height: isMobile ? "100vh" : "auto",
-                zIndex: isMobile ? 999 : "auto",
-                width: isMobile ? "100%" : leftPanelVisible ? "280px" : "0px",
-                opacity: isMobile ? (sidebarOpen ? 1 : 0) : leftPanelVisible ? 1 : 0,
-                transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-                transition: isMobile
-                  ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
-                  : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease",
-                overflow: "hidden",
-              }}
+              style={panelStyle}
             />
           )}
         </>
       )}
 
       {/* ChatArea */}
-      <ChatArea 
+      <ChatArea
+        key={selectedConversation?.id || "empty-chat"}
         conversation={selectedConversation} 
         isMobile={isMobile}
         onBack={() => {
