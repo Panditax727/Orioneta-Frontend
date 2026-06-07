@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, Menu, MessageSquare, Search, Users, X } from "lucide-react";
+import { Bell, LogOut, Menu, MessageSquare, Palette, Search, Store, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
 import ChatUtilityPanel from "./ChatUtilityPanel";
+import CustomizationPanel from "../../customization/components/CustomizationPanel";
+import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
 import { chatService } from "../services/chatService";
 import {
   clearSession,
@@ -26,13 +28,18 @@ export default function ChatLayout() {
   const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
+  const panelWidth = activeSection === "neta-market"
+    ? 360
+    : activeSection === "customization"
+      ? 340
+      : 280;
   const panelStyle = {
     position: isMobile ? "fixed" : "relative",
     left: isMobile ? 0 : "auto",
     top: isMobile ? 0 : "auto",
     height: isMobile ? "100vh" : "auto",
     zIndex: isMobile ? 999 : "auto",
-    width: isMobile ? "100%" : panelVisible ? "280px" : "0px",
+    width: isMobile ? "100%" : panelVisible ? `${panelWidth}px` : "0px",
     opacity: panelVisible ? 1 : 0,
     transform: isMobile ? (panelVisible ? "translateX(0)" : "translateX(-100%)") : "none",
     transition: isMobile
@@ -181,6 +188,20 @@ export default function ChatLayout() {
           icon={<Bell size={20} />}
         />
 
+        <NavIcon
+          active={activeSection === "customization"}
+          onClick={() => handleSectionChange("customization")}
+          tooltip="Personalizacion"
+          icon={<Palette size={20} />}
+        />
+
+        <NavIcon
+          active={activeSection === "neta-market"}
+          onClick={() => handleSectionChange("neta-market")}
+          tooltip="Neta Market"
+          icon={<Store size={20} />}
+        />
+
         <div style={{ flex: 1 }} />
 
         <NavIcon
@@ -217,6 +238,18 @@ export default function ChatLayout() {
             <FriendshipPanel
               key={`friends-${sessionIdentity}`}
               onFriendClick={handleFriendConversation}
+              style={panelStyle}
+            />
+          ) : activeSection === "customization" ? (
+            <CustomizationPanel
+              key={`customization-${sessionIdentity}-${selectedConversation?.id || "none"}`}
+              selectedConversation={selectedConversation}
+              style={panelStyle}
+            />
+          ) : activeSection === "neta-market" ? (
+            <NetaMarketPanel
+              key={`neta-market-${sessionIdentity}-${selectedConversation?.id || "none"}`}
+              selectedConversation={selectedConversation}
               style={panelStyle}
             />
           ) : activeSection === "search" || activeSection === "notifications" ? (
