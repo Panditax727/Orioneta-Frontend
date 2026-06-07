@@ -1,11 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Menu, MessageSquare, Search, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
 import ChatUtilityPanel from "./ChatUtilityPanel";
 import { chatService } from "../services/chatService";
-import { clearSession, getSession } from "../../auth/session";
+import {
+  clearSession,
+  getSession,
+  getSessionIdentity,
+  subscribeToSessionChanges,
+} from "../../auth/session";
 import FriendshipPanel from "../../status/components/FriendshipPanel";
 import logoImage from "../../../assets/logo.png";
 
@@ -16,7 +21,9 @@ export default function ChatLayout() {
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
-  const session = getSession();
+  const [session, setSession] = useState(() => getSession());
+  const sessionIdentity = getSessionIdentity(session);
+  const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
   const panelStyle = {
@@ -46,6 +53,23 @@ export default function ChatLayout() {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  useEffect(() => subscribeToSessionChanges((nextSession) => {
+    const nextIdentity = getSessionIdentity(nextSession);
+
+    if (nextIdentity !== sessionIdentityRef.current) {
+      sessionIdentityRef.current = nextIdentity;
+      setSelectedConversation(null);
+      setActiveSection("chats");
+      setSidebarOpen(false);
+    }
+
+    setSession(nextSession);
+
+    if (!nextSession) {
+      navigate("/login", { replace: true });
+    }
+  }), [navigate]);
 
   const handleSectionChange = (section) => {
     setActiveSection(section);
@@ -191,11 +215,13 @@ export default function ChatLayout() {
           
           {activeSection === "friends" ? (
             <FriendshipPanel
+              key={`friends-${sessionIdentity}`}
               onFriendClick={handleFriendConversation}
               style={panelStyle}
             />
           ) : activeSection === "search" || activeSection === "notifications" ? (
             <ChatUtilityPanel
+              key={`${activeSection}-${sessionIdentity}`}
               mode={activeSection}
               onSelectConversation={(conv) => {
                 setSelectedConversation(conv);
@@ -206,6 +232,7 @@ export default function ChatLayout() {
             />
           ) : (
             <Sidebar
+              key={`sidebar-${sessionIdentity}`}
               activeSection={activeSection}
               selectedConversation={selectedConversation}
               onSelectConversation={(conv) => {
@@ -220,7 +247,7 @@ export default function ChatLayout() {
 
       {/* ChatArea */}
       <ChatArea
-        key={selectedConversation?.id || "empty-chat"}
+        key={`${sessionIdentity}-${selectedConversation?.id || "empty-chat"}`}
         conversation={selectedConversation} 
         isMobile={isMobile}
         onBack={() => {

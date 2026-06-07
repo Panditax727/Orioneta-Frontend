@@ -1,4 +1,27 @@
 export const SESSION_KEY = "orioneta.auth.session";
+export const SESSION_CHANGED_EVENT = "orioneta.auth.session.changed";
+
+function readRawSession() {
+  const tabSession = sessionStorage.getItem(SESSION_KEY);
+
+  if (tabSession) {
+    return tabSession;
+  }
+
+  const legacySession = localStorage.getItem(SESSION_KEY);
+
+  if (legacySession) {
+    sessionStorage.setItem(SESSION_KEY, legacySession);
+    localStorage.removeItem(SESSION_KEY);
+  }
+
+  return legacySession;
+}
+
+function persistSession(session) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  localStorage.removeItem(SESSION_KEY);
+}
 
 function parseExpiresIn(value) {
   const seconds = Number(value);
@@ -26,12 +49,13 @@ export function normalizeAuthResponse(authResponse) {
 
 export function saveSession(authResponse) {
   const session = normalizeAuthResponse(authResponse);
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  persistSession(session);
+  notifySessionChanged();
   return session;
 }
 
 export function getSession() {
-  const rawSession = localStorage.getItem(SESSION_KEY);
+  const rawSession = readRawSession();
 
   if (!rawSession) {
     return null;
@@ -64,7 +88,8 @@ export function updateSession(updates) {
     ...updates,
   };
 
-  localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+  persistSession(nextSession);
+  notifySessionChanged();
   return nextSession;
 }
 
@@ -80,5 +105,31 @@ export function saveProfileInSession(profile) {
 }
 
 export function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SESSION_KEY);
+  notifySessionChanged();
+}
+
+export function getSessionIdentity(session = getSession()) {
+  if (!session) {
+    return "anonymous";
+  }
+
+  return String(session.profileUserId || session.email || session.userId || "anonymous");
+}
+
+export function subscribeToSessionChanges(callback) {
+  const handleLocalSessionChange = () => {
+    callback(getSession());
+  };
+
+  window.addEventListener(SESSION_CHANGED_EVENT, handleLocalSessionChange);
+
+  return () => {
+    window.removeEventListener(SESSION_CHANGED_EVENT, handleLocalSessionChange);
+  };
+}
+
+function notifySessionChanged() {
+  window.dispatchEvent(new Event(SESSION_CHANGED_EVENT));
 }
