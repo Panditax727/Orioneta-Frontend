@@ -14,7 +14,7 @@ function pendingOnly(request) {
   return request.status === "PENDING";
 }
 
-export default function FriendshipPanel({ onFriendClick, style }) {
+export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }) {
   const {
     friends,
     userProfile,
@@ -109,7 +109,11 @@ export default function FriendshipPanel({ onFriendClick, style }) {
         ...style,
       }}
     >
-      <UserProfile profile={userProfile} onUpdateStatus={updateStatus} />
+      <UserProfile
+        profile={userProfile}
+        onUpdateStatus={updateStatus}
+        onOpenSettings={onOpenSettings}
+      />
 
       <section style={{ padding: "12px 16px", borderBottom: "1px solid #1e2030" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>

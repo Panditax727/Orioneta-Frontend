@@ -10,7 +10,9 @@ import {
 } from "../../../services/friendshipService";
 import {
   ensureCurrentUserProfile,
+  updateUserProfile,
   updateUserStatus,
+  updateUserVisibility,
 } from "../../../services/userService";
 
 const DOMAIN_TO_UI_STATUS = {
@@ -50,6 +52,7 @@ function toUiProfile(profile) {
     activity: STATUS_LABELS[status],
     bio: profile.bio,
     profilePhoto: profile.profilePhoto,
+    visibility: profile.visibility || "PUBLIC",
     joinedDate: profile.createdAt
       ? new Date(profile.createdAt).toLocaleDateString()
       : "",
@@ -97,6 +100,24 @@ export const statusService = {
       profile.userID,
       UI_TO_DOMAIN_STATUS[status] || "OFFLINE",
     );
+
+    return toUiProfile(updatedProfile);
+  },
+
+  updateUserProfile: async (profileData) => {
+    const profile = await ensureCurrentUserProfile();
+    const updatedProfile = await updateUserProfile(profile.userID, {
+      displayName: profileData.displayName,
+      bio: profileData.bio,
+      profilePhoto: profileData.profilePhoto,
+    });
+
+    return toUiProfile(updatedProfile);
+  },
+
+  updateUserVisibility: async (visibility) => {
+    const profile = await ensureCurrentUserProfile();
+    const updatedProfile = await updateUserVisibility(profile.userID, visibility);
 
     return toUiProfile(updatedProfile);
   },

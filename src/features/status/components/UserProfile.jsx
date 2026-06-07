@@ -8,7 +8,7 @@ const STATUS_OPTIONS = [
   { value: "offline", label: "Invisible", color: "#565f89" },
 ];
 
-export default function UserProfile({ profile, onUpdateStatus }) {
+export default function UserProfile({ profile, onUpdateStatus, onOpenSettings }) {
   const [isEditing, setIsEditing] = useState(false);
   const [customActivity, setCustomActivity] = useState(profile?.activity || "");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -164,7 +164,14 @@ export default function UserProfile({ profile, onUpdateStatus }) {
           <button
             type="button"
             title="Configuracion de perfil"
-            onClick={() => setShowSettings((current) => !current)}
+            onClick={() => {
+              if (onOpenSettings) {
+                onOpenSettings();
+                return;
+              }
+
+              setShowSettings((current) => !current);
+            }}
             style={{
               width: 32,
               height: 32,

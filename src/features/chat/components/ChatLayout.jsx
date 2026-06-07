@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, Menu, MessageSquare, Palette, Search, Store, Users, X } from "lucide-react";
+import { Bell, LogOut, Menu, MessageSquare, Palette, Search, Settings, Store, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
 import ChatUtilityPanel from "./ChatUtilityPanel";
 import CustomizationPanel from "../../customization/components/CustomizationPanel";
 import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
+import SettingsPanel from "../../settings/components/SettingsPanel";
 import { chatService } from "../services/chatService";
 import {
   clearSession,
@@ -28,7 +29,7 @@ export default function ChatLayout() {
   const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
-  const panelWidth = activeSection === "neta-market"
+  const panelWidth = activeSection === "settings" || activeSection === "neta-market"
     ? 360
     : activeSection === "customization"
       ? 340
@@ -205,6 +206,13 @@ export default function ChatLayout() {
         <div style={{ flex: 1 }} />
 
         <NavIcon
+          active={activeSection === "settings"}
+          onClick={() => handleSectionChange("settings")}
+          tooltip="Configuracion"
+          icon={<Settings size={20} />}
+        />
+
+        <NavIcon
           tooltip="Cerrar sesion"
           onClick={handleLogout}
           icon={<LogOut size={19} />}
@@ -238,6 +246,13 @@ export default function ChatLayout() {
             <FriendshipPanel
               key={`friends-${sessionIdentity}`}
               onFriendClick={handleFriendConversation}
+              onOpenSettings={() => handleSectionChange("settings")}
+              style={panelStyle}
+            />
+          ) : activeSection === "settings" ? (
+            <SettingsPanel
+              key={`settings-${sessionIdentity}`}
+              onLogout={handleLogout}
               style={panelStyle}
             />
           ) : activeSection === "customization" ? (

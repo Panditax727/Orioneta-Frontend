@@ -94,10 +94,23 @@ export async function updateUserStatus(userId, status) {
 }
 
 export async function updateUserProfile(userId, profileData) {
-  return normalizeUserProfile(await apiRequest(`/api/users/${userId}/profile`, {
+  const updatedProfile = normalizeUserProfile(await apiRequest(`/api/users/${userId}/profile`, {
     method: "PATCH",
     body: profileData,
   }));
+
+  saveProfileInSession(updatedProfile);
+  return updatedProfile;
+}
+
+export async function updateUserVisibility(userId, visibility) {
+  const updatedProfile = normalizeUserProfile(await apiRequest(`/api/users/${userId}/visibility`, {
+    method: "PATCH",
+    body: { visibility },
+  }));
+
+  saveProfileInSession(updatedProfile);
+  return updatedProfile;
 }
 
 export async function ensureCurrentUserProfile(profileData = {}) {
