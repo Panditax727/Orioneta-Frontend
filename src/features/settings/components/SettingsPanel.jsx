@@ -4,13 +4,11 @@ import {
   ImagePlus,
   LogOut,
   Palette,
-  RefreshCcw,
   Save,
   Settings,
   Shield,
   Trash2,
   UserRound,
-  Wifi,
 } from "lucide-react";
 import { useCustomization } from "../../customization/hooks/useCustomization";
 import {
@@ -35,7 +33,6 @@ const SETTING_SECTIONS = [
   { id: "account", label: "Cuenta", icon: Settings },
   { id: "privacy", label: "Privacidad", icon: Shield },
   { id: "appearance", label: "Apariencia", icon: Palette },
-  { id: "realtime", label: "Tiempo real", icon: Wifi },
   { id: "session", label: "Sesion", icon: LogOut },
 ];
 
@@ -51,7 +48,7 @@ function buildForm(profile) {
   };
 }
 
-export default function SettingsPanel({ style, realtime, onLogout }) {
+export default function SettingsPanel({ style, onLogout }) {
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(() => buildForm(null));
@@ -230,7 +227,7 @@ export default function SettingsPanel({ style, realtime, onLogout }) {
               Configuracion
             </h2>
             <p style={{ color: "#565f89", fontSize: 12, margin: "2px 0 0" }}>
-              {loading ? "Cargando..." : saving || savingAppearance ? "Guardando..." : realtime?.label || "Orioneta"}
+              {loading ? "Cargando..." : saving || savingAppearance ? "Guardando..." : "Perfil, cuenta y apariencia"}
             </p>
           </div>
         </div>
@@ -289,10 +286,6 @@ export default function SettingsPanel({ style, realtime, onLogout }) {
               saving={savingAppearance}
               onUpdate={updateAppearance}
             />
-          )}
-
-          {activeSection === "realtime" && (
-            <RealtimeSection realtime={realtime} />
           )}
 
           {activeSection === "session" && (
@@ -484,30 +477,6 @@ function AppearanceSection({ userCustomization, visuals, saving, onUpdate }) {
           style={{ accentColor: visuals.accent, width: 180 }}
         />
       </SettingRow>
-    </section>
-  );
-}
-
-function RealtimeSection({ realtime }) {
-  return (
-    <section>
-      <SectionHeader title="Tiempo real" subtitle="Estado de la conexion WebSocket." />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 14, border: "1px solid #1e2030", borderRadius: 8, background: "#10111a" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: realtime?.connected ? "rgba(34, 197, 94, 0.14)" : "rgba(245, 158, 11, 0.12)", color: realtime?.connected ? "#22c55e" : "#f59e0b", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Wifi size={17} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 700, margin: 0 }}>{realtime?.label || "Tiempo real inactivo"}</p>
-            <p style={{ color: "#565f89", fontSize: 11, margin: "2px 0 0" }}>
-              {realtime?.lastEventAt ? `Ultimo evento ${realtime.lastEventAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "WebSocket /ws/chat"}
-            </p>
-          </div>
-        </div>
-        <button type="button" onClick={realtime?.reconnect} title="Reconectar realtime" style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#a78bfa", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-          <RefreshCcw size={15} />
-        </button>
-      </div>
     </section>
   );
 }

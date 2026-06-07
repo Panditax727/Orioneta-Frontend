@@ -184,6 +184,14 @@ GET  /oauth2/authorization/google
 GET  /oauth2/authorization/github
 ```
 
+Para login/registro con Google o GitHub, el `auth-service` debe redirigir al
+frontend despues del proveedor externo:
+
+```env
+ORIONETA_OAUTH2_SUCCESS_REDIRECT_URI=http://localhost:5173/auth/oauth2/callback
+ORIONETA_OAUTH2_FAILURE_REDIRECT_URI=http://localhost:5173/auth/oauth2/error
+```
+
 La respuesta de autenticacion debe incluir `accessToken`, `refreshToken`,
 `tokenType`, `expiresInSeconds`, `userId`, `email` y `role`.
 

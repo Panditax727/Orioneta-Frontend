@@ -26,7 +26,7 @@ export default function ChatLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [session, setSession] = useState(() => getSession());
-  const realtime = useRealtimeConnection();
+  useRealtimeConnection();
   const sessionIdentity = getSessionIdentity(session);
   const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
@@ -256,7 +256,6 @@ export default function ChatLayout() {
           ) : activeSection === "settings" ? (
             <SettingsPanel
               key={`settings-${sessionIdentity}`}
-              realtime={realtime}
               onLogout={handleLogout}
               style={panelStyle}
             />

@@ -13,6 +13,7 @@ import {
 import {
   DEFAULT_OAUTH_PROVIDERS,
   getOAuthProviders,
+  mergeOAuthProviders,
   redirectToOAuth,
   register,
 } from "../../../services/authService";
@@ -25,21 +26,6 @@ const OAUTH_ICONS = {
   google: { Icon: FaGoogle, color: "#4285F4" },
   github: { Icon: FaGithub, color: "#ffffff" },
 };
-
-function mergeProviders(apiProviders) {
-  return DEFAULT_OAUTH_PROVIDERS.map((provider) => {
-    const backendProvider = apiProviders.find(
-      (item) => item.provider === provider.id || item.id === provider.id,
-    );
-
-    return {
-      ...provider,
-      ...backendProvider,
-      id: provider.id,
-      label: provider.label,
-    };
-  });
-}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -56,8 +42,8 @@ export default function RegisterPage() {
 
   useEffect(() => {
     getOAuthProviders()
-      .then((providers) => setOauthProviders(mergeProviders(providers)))
-      .catch(() => setOauthProviders(DEFAULT_OAUTH_PROVIDERS));
+      .then((providers) => setOauthProviders(mergeOAuthProviders(providers)))
+      .catch(() => setOauthProviders(mergeOAuthProviders()));
   }, []);
 
   const handleChange = (event) => {
@@ -115,7 +101,11 @@ export default function RegisterPage() {
       return;
     }
 
-    redirectToOAuth(providerId, oauthProviders);
+    try {
+      redirectToOAuth(providerId, oauthProviders);
+    } catch (error) {
+      setApiError(error.message || "No se pudo iniciar OAuth");
+    }
   };
 
   return (
@@ -214,7 +204,7 @@ export default function RegisterPage() {
 
       <div className="auth-oauth-grid">
         {oauthProviders.map((provider) => {
-          const oauthIcon = OAUTH_ICONS[provider.id];
+          const oauthIcon = OAUTH_ICONS[provider.id] || OAUTH_ICONS.github;
           const Icon = oauthIcon.Icon;
 
           return (
@@ -223,10 +213,11 @@ export default function RegisterPage() {
               type="button"
               className="auth-oauth-button"
               onClick={() => handleOAuth(provider.id)}
-              disabled={loading}
+              disabled={loading || provider.enabled === false}
               title={`Registrarte con ${provider.label}`}
             >
               <Icon size={22} color={oauthIcon.color} />
+              <span>{provider.label}</span>
             </button>
           );
         })}

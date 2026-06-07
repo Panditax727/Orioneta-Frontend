@@ -8,16 +8,28 @@ function readOAuthParams() {
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const queryParams = new URLSearchParams(window.location.search);
   const params = hashParams.size > 0 ? hashParams : queryParams;
+  const getParam = (...names) => {
+    for (const name of names) {
+      const value = params.get(name) || queryParams.get(name);
+
+      if (value) {
+        return value;
+      }
+    }
+
+    return null;
+  };
 
   return {
-    accessToken: params.get("accessToken"),
-    refreshToken: params.get("refreshToken"),
-    tokenType: params.get("tokenType") || "Bearer",
-    expiresIn: params.get("expiresIn"),
-    userId: params.get("userId"),
-    email: params.get("email"),
-    role: params.get("role") || "USER",
-    error: params.get("error"),
+    accessToken: getParam("accessToken", "access_token"),
+    refreshToken: getParam("refreshToken", "refresh_token"),
+    tokenType: getParam("tokenType", "token_type") || "Bearer",
+    expiresIn: getParam("expiresIn", "expiresInSeconds", "expires_in"),
+    userId: getParam("userId", "user_id"),
+    profileUserId: getParam("profileUserId", "profile_user_id"),
+    email: getParam("email"),
+    role: getParam("role") || "USER",
+    error: getParam("error", "error_description"),
   };
 }
 

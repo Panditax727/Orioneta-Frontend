@@ -13,6 +13,7 @@ import {
   DEFAULT_OAUTH_PROVIDERS,
   getOAuthProviders,
   login,
+  mergeOAuthProviders,
   redirectToOAuth,
 } from "../../../services/authService";
 import { saveSession } from "../session";
@@ -48,21 +49,6 @@ const OAUTH_ICONS = {
   github: { Icon: FaGithub, color: "#ffffff" },
 };
 
-function mergeProviders(apiProviders) {
-  return DEFAULT_OAUTH_PROVIDERS.map((provider) => {
-    const backendProvider = apiProviders.find(
-      (item) => item.provider === provider.id || item.id === provider.id,
-    );
-
-    return {
-      ...provider,
-      ...backendProvider,
-      id: provider.id,
-      label: provider.label,
-    };
-  });
-}
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
@@ -74,8 +60,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     getOAuthProviders()
-      .then((providers) => setOauthProviders(mergeProviders(providers)))
-      .catch(() => setOauthProviders(DEFAULT_OAUTH_PROVIDERS));
+      .then((providers) => setOauthProviders(mergeOAuthProviders(providers)))
+      .catch(() => setOauthProviders(mergeOAuthProviders()));
   }, []);
 
   const handleChange = (event) => {
@@ -130,7 +116,11 @@ export default function LoginPage() {
       return;
     }
 
-    redirectToOAuth(providerId, oauthProviders);
+    try {
+      redirectToOAuth(providerId, oauthProviders);
+    } catch (error) {
+      setApiError(error.message || "No se pudo iniciar OAuth");
+    }
   };
 
   return (
@@ -225,7 +215,7 @@ export default function LoginPage() {
 
       <div className="auth-oauth-grid">
         {oauthProviders.map((provider) => {
-          const oauthIcon = OAUTH_ICONS[provider.id];
+          const oauthIcon = OAUTH_ICONS[provider.id] || OAUTH_ICONS.github;
           const Icon = oauthIcon.Icon;
 
           return (
@@ -234,10 +224,11 @@ export default function LoginPage() {
               type="button"
               className="auth-oauth-button"
               onClick={() => handleOAuth(provider.id)}
-              disabled={loading}
+              disabled={loading || provider.enabled === false}
               title={`Continuar con ${provider.label}`}
             >
               <Icon size={22} color={oauthIcon.color} />
+              <span>{provider.label}</span>
             </button>
           );
         })}
