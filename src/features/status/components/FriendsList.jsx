@@ -148,7 +148,13 @@ function FriendItem({ friend, onClick }) {
             fontWeight: 600,
           }}
         >
-          {friend.avatar}
+          {friend.profilePhoto ? (
+            <img
+              src={friend.profilePhoto}
+              alt=""
+              style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : friend.avatar}
         </div>
         {friend.status !== "offline" && (
           <div

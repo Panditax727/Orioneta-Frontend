@@ -55,7 +55,13 @@ export default function UserProfile({ profile, onUpdateStatus, onOpenSettings })
             flexShrink: 0,
           }}
         >
-          {profile.avatar}
+          {profile.profilePhoto ? (
+            <img
+              src={profile.profilePhoto}
+              alt=""
+              style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : profile.avatar}
         </div>
 
         {/* Info */}

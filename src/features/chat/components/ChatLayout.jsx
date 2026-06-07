@@ -31,7 +31,9 @@ export default function ChatLayout() {
   const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
-  const panelWidth = activeSection === "settings" || activeSection === "neta-market"
+  const panelWidth = activeSection === "settings"
+    ? 720
+    : activeSection === "neta-market"
     ? 360
     : activeSection === "customization"
       ? 340

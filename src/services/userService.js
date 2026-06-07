@@ -1,5 +1,6 @@
 import { getSession, saveProfileInSession } from "../features/auth/session";
 import { apiRequest, ApiError } from "./apiClient";
+import { resolveProfilePhoto } from "./profilePhotoService";
 
 const USERNAME_MAX_LENGTH = 60;
 
@@ -54,8 +55,13 @@ export function normalizeUserProfile(profile) {
     return null;
   }
 
+  const profilePhotoReference = profile.profilePhoto || "";
+  const resolvedProfilePhoto = resolveProfilePhoto(profilePhotoReference);
+
   return {
     ...profile,
+    profilePhoto: resolvedProfilePhoto,
+    profilePhotoReference,
     id: profile.userID,
     name: profile.displayName || profile.userName || profile.email,
     avatar: (profile.displayName || profile.userName || profile.email || "O")

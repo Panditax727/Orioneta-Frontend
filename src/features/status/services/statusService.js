@@ -52,6 +52,7 @@ function toUiProfile(profile) {
     activity: STATUS_LABELS[status],
     bio: profile.bio,
     profilePhoto: profile.profilePhoto,
+    profilePhotoReference: profile.profilePhotoReference || profile.profilePhoto || "",
     visibility: profile.visibility || "PUBLIC",
     joinedDate: profile.createdAt
       ? new Date(profile.createdAt).toLocaleDateString()
@@ -109,7 +110,7 @@ export const statusService = {
     const updatedProfile = await updateUserProfile(profile.userID, {
       displayName: profileData.displayName,
       bio: profileData.bio,
-      profilePhoto: profileData.profilePhoto,
+      profilePhoto: profileData.profilePhotoReference || profileData.profilePhoto,
     });
 
     return toUiProfile(updatedProfile);
