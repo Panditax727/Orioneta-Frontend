@@ -5,6 +5,7 @@ import {
   findUserByFriendCode,
   findUserById,
 } from "../../../services/userService";
+import { publishRealtimeEvent } from "../../realtime/services/realtimeService";
 
 const CHAT_STORAGE_KEY = "orioneta.chat.local-state";
 const CHAT_UPDATED_EVENT = "orioneta-chat-updated";
@@ -464,7 +465,18 @@ export const chatService = {
 
     notifyChatUpdated();
 
-    return normalizeBackendMessage(sentMessage, currentProfile.userID);
+    const normalizedMessage = await normalizeBackendMessage(sentMessage, currentProfile.userID);
+
+    publishRealtimeEvent({
+      type: "MESSAGE_SENT",
+      conversationId,
+      messageId: normalizedMessage.id,
+      senderId: currentProfile.userID,
+      content: normalizedMessage.content,
+      occurredAt: normalizedMessage.createdAt || new Date().toISOString(),
+    });
+
+    return normalizedMessage;
   },
 
   searchConversations: async (query, type = "all") => {

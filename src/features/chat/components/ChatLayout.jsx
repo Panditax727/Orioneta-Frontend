@@ -7,6 +7,7 @@ import ChatUtilityPanel from "./ChatUtilityPanel";
 import CustomizationPanel from "../../customization/components/CustomizationPanel";
 import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
 import SettingsPanel from "../../settings/components/SettingsPanel";
+import { useRealtimeConnection } from "../../realtime/hooks/useRealtimeConnection";
 import { chatService } from "../services/chatService";
 import {
   clearSession,
@@ -25,6 +26,7 @@ export default function ChatLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [session, setSession] = useState(() => getSession());
+  const realtime = useRealtimeConnection();
   const sessionIdentity = getSessionIdentity(session);
   const sessionIdentityRef = useRef(sessionIdentity);
   const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
@@ -252,6 +254,7 @@ export default function ChatLayout() {
           ) : activeSection === "settings" ? (
             <SettingsPanel
               key={`settings-${sessionIdentity}`}
+              realtime={realtime}
               onLogout={handleLogout}
               style={panelStyle}
             />

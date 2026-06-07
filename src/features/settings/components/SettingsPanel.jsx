@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, LogOut, Save, Settings, UserRound } from "lucide-react";
+import { Copy, LogOut, RefreshCcw, Save, Settings, UserRound, Wifi } from "lucide-react";
 import { statusService } from "../../status/services/statusService";
 import { copyToClipboard } from "../../../shared/utils/helpers";
 
@@ -265,6 +265,35 @@ export default function SettingsPanel({ style, realtime, onLogout }) {
         <p style={{ color: "#565f89", fontSize: 11, lineHeight: 1.4, margin: "10px 0 0" }}>
           El ID interno se mantiene oculto porque solo sirve para integraciones tecnicas.
         </p>
+
+        <SectionTitle title="Tiempo real" />
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, border: "1px solid #1e2030", borderRadius: 8, background: "#10111a" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: realtime?.connected ? "rgba(34, 197, 94, 0.14)" : "rgba(245, 158, 11, 0.12)", color: realtime?.connected ? "#22c55e" : "#f59e0b", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Wifi size={16} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 700, margin: 0 }}>
+                {realtime?.label || "Tiempo real inactivo"}
+              </p>
+              <p style={{ color: "#565f89", fontSize: 11, margin: "2px 0 0" }}>
+                {realtime?.lastEventAt
+                  ? `Ultimo evento ${realtime.lastEventAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "WebSocket /ws/chat"}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={realtime?.reconnect}
+            title="Reconectar realtime"
+            style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#a78bfa", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+          >
+            <RefreshCcw size={14} />
+          </button>
+        </div>
 
         <button
           type="button"

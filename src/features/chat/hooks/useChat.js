@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { subscribeRealtimeEvents } from "../../realtime/services/realtimeService";
 import { chatService } from "../services/chatService";
 
 export function useChat(conversationId) {
@@ -75,6 +76,20 @@ export function useChat(conversationId) {
     return () => window.clearInterval(intervalId);
   }, [conversationId, fetchMessages]);
 
+  useEffect(() => {
+    if (!conversationId) {
+      return undefined;
+    }
+
+    return subscribeRealtimeEvents((event) => {
+      if (!isMessageEventForConversation(event, conversationId)) {
+        return;
+      }
+
+      void fetchMessages({ silent: true });
+    });
+  }, [conversationId, fetchMessages]);
+
   return {
     messages,
     loading,
@@ -83,6 +98,15 @@ export function useChat(conversationId) {
     sendMessage,
     fetchMessages,
   };
+}
+
+function isMessageEventForConversation(event, conversationId) {
+  if (!event?.type || !event?.conversationId) {
+    return false;
+  }
+
+  return event.type === "MESSAGE_SENT"
+    && String(event.conversationId) === String(conversationId);
 }
 
 function areMessagesEqual(currentMessages, nextMessages) {

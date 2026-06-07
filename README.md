@@ -167,6 +167,13 @@ Para probar contra EC2, usa la URL publica del gateway:
 VITE_API_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080
 ```
 
+El realtime se deriva de `VITE_API_BASE_URL` y usa `/ws/chat`. Si necesitas
+apuntar WebSocket a otra URL, puedes sobrescribirlo:
+
+```env
+VITE_REALTIME_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080
+```
+
 El frontend espera estos endpoints del gateway:
 
 ```text
