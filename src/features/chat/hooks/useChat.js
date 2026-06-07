@@ -41,13 +41,17 @@ export function useChat(conversationId) {
     }
   }, [conversationId]);
 
-  const sendMessage = useCallback(async (content) => {
+  const sendMessage = useCallback(async (content, options = {}) => {
     if (!conversationId || !content.trim()) return;
     
     try {
       setSending(true);
       setError(null);
-      const newMessage = await chatService.sendMessage(conversationId, content);
+      const newMessage = await chatService.sendMessage(
+        conversationId,
+        content,
+        options.type || "TEXT",
+      );
       setMessages(prev => [...prev, newMessage]);
       return newMessage;
     } catch (err) {

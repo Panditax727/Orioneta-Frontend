@@ -3,15 +3,19 @@ import {
   Copy,
   ImagePlus,
   LogOut,
+  MessageCircle,
   Palette,
   Save,
   Settings,
   Shield,
+  SlidersHorizontal,
   Trash2,
   UserRound,
 } from "lucide-react";
 import { useCustomization } from "../../customization/hooks/useCustomization";
 import {
+  BUBBLE_STYLES,
+  CHAT_THEME_PRESETS,
   FONT_PRESETS,
   GLOBAL_THEME_PRESETS,
 } from "../../customization/services/customizationService";
@@ -32,7 +36,7 @@ const SETTING_SECTIONS = [
   { id: "profile", label: "Perfil", icon: UserRound },
   { id: "account", label: "Cuenta", icon: Settings },
   { id: "privacy", label: "Privacidad", icon: Shield },
-  { id: "appearance", label: "Apariencia", icon: Palette },
+  { id: "appearance", label: "Personalizacion", icon: Palette },
   { id: "session", label: "Sesion", icon: LogOut },
 ];
 
@@ -48,7 +52,7 @@ function buildForm(profile) {
   };
 }
 
-export default function SettingsPanel({ style, onLogout }) {
+export default function SettingsPanel({ selectedConversation, style, onLogout }) {
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(() => buildForm(null));
@@ -56,12 +60,15 @@ export default function SettingsPanel({ style, onLogout }) {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const conversationId = selectedConversation?.backend ? selectedConversation.id : null;
   const {
     userCustomization,
+    conversationCustomization,
     visuals,
     saving: savingAppearance,
     updateUserCustomization,
-  } = useCustomization(null);
+    updateConversationCustomization,
+  } = useCustomization(conversationId);
 
   useEffect(() => {
     let mounted = true;
@@ -205,6 +212,17 @@ export default function SettingsPanel({ style, onLogout }) {
     }
   };
 
+  const updateConversationAppearance = async (updates, message) => {
+    try {
+      setError("");
+      setNotice("");
+      await updateConversationCustomization(updates);
+      setNotice(message);
+    } catch (appearanceError) {
+      setError(appearanceError.message || "No se pudo guardar el chat");
+    }
+  };
+
   return (
     <aside
       style={{
@@ -281,10 +299,13 @@ export default function SettingsPanel({ style, onLogout }) {
 
           {activeSection === "appearance" && (
             <AppearanceSection
+              selectedConversation={selectedConversation}
               userCustomization={userCustomization}
+              conversationCustomization={conversationCustomization}
               visuals={visuals}
               saving={savingAppearance}
               onUpdate={updateAppearance}
+              onUpdateConversation={updateConversationAppearance}
             />
           )}
 
@@ -422,10 +443,22 @@ function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
   );
 }
 
-function AppearanceSection({ userCustomization, visuals, saving, onUpdate }) {
+function AppearanceSection({
+  selectedConversation,
+  userCustomization,
+  conversationCustomization,
+  visuals,
+  saving,
+  onUpdate,
+  onUpdateConversation,
+}) {
+  const canCustomizeChat = Boolean(selectedConversation?.backend);
+
   return (
     <section>
-      <SectionHeader title="Apariencia" subtitle="Preferencias globales de interfaz." />
+      <SectionHeader title="Personalizacion" subtitle="Temas globales y estilo del chat actual." />
+
+      <SectionTitle icon={<SlidersHorizontal size={15} />} title="Global" />
 
       <p style={fieldLabelStyle}>Tema global</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginBottom: 14 }}>
@@ -477,7 +510,64 @@ function AppearanceSection({ userCustomization, visuals, saving, onUpdate }) {
           style={{ accentColor: visuals.accent, width: 180 }}
         />
       </SettingRow>
+
+      <SectionTitle icon={<MessageCircle size={15} />} title="Chat actual" />
+
+      {canCustomizeChat ? (
+        <>
+          <Field label="Fondo">
+            <select
+              value={conversationCustomization?.activeBackgroundId || conversationCustomization?.activeChatThemeId || "default-chat"}
+              onChange={(event) => onUpdateConversation({ activeBackgroundId: event.target.value }, "Fondo aplicado")}
+              disabled={saving}
+              style={inputStyle}
+            >
+              {CHAT_THEME_PRESETS.map((theme) => (
+                <option key={theme.id} value={theme.id}>
+                  {theme.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <SettingRow label="Burbujas">
+            <SegmentedControl
+              value={conversationCustomization?.bubbleStyle || "DEFAULT"}
+              options={BUBBLE_STYLES}
+              disabled={saving}
+              onChange={(bubbleStyle) => onUpdateConversation({ bubbleStyle }, "Burbujas actualizadas")}
+            />
+          </SettingRow>
+
+          <SettingRow label="Tamano del texto">
+            <input
+              type="range"
+              min="12"
+              max="18"
+              value={conversationCustomization?.fontSize ?? 14}
+              onChange={(event) => onUpdateConversation({ fontSize: Number(event.target.value) }, "Texto actualizado")}
+              disabled={saving}
+              style={{ accentColor: visuals.accent, width: 180 }}
+            />
+          </SettingRow>
+        </>
+      ) : (
+        <div style={{ padding: 14, background: "#10111a", border: "1px solid #1e2030", borderRadius: 8, color: "#565f89", fontSize: 12, lineHeight: 1.45 }}>
+          Selecciona un chat guardado en backend para ajustar fondo, burbujas y tamano de texto.
+        </div>
+      )}
     </section>
+  );
+}
+
+function SectionTitle({ icon, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#a78bfa", margin: "16px 0 10px" }}>
+      {icon}
+      <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 700, margin: 0 }}>
+        {title}
+      </p>
+    </div>
   );
 }
 
@@ -534,6 +624,29 @@ function Toggle({ checked, onChange }) {
     <button type="button" onClick={onChange} style={{ width: 42, height: 24, borderRadius: 999, border: "1px solid #1e2030", background: checked ? "#7c3aed" : "#1a1b26", padding: 2, cursor: "pointer" }}>
       <span style={{ display: "block", width: 18, height: 18, borderRadius: "50%", background: "white", transform: checked ? "translateX(18px)" : "translateX(0)", transition: "transform 0.16s ease" }} />
     </button>
+  );
+}
+
+function SegmentedControl({ value, options, disabled, onChange }) {
+  return (
+    <div style={{ display: "flex", background: "#10111a", border: "1px solid #1e2030", borderRadius: 8, padding: 2 }}>
+      {options.map((option) => {
+        const active = value === option.id;
+
+        return (
+          <button
+            key={option.id}
+            type="button"
+            title={option.name}
+            disabled={disabled}
+            onClick={() => onChange(option.id)}
+            style={{ minWidth: 32, height: 30, borderRadius: 6, border: "none", background: active ? "#7c3aed" : "transparent", color: active ? "white" : "#565f89", cursor: disabled ? "wait" : "pointer", fontSize: 11, fontWeight: 700 }}
+          >
+            {option.name.charAt(0)}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

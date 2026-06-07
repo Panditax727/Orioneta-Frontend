@@ -156,6 +156,51 @@ function formatMessageTime(value) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function parseMessagePayload(content) {
+  if (typeof content !== "string") {
+    return { text: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+  } catch {
+    // Plain text message.
+  }
+
+  return { text: content };
+}
+
+function getMessageSummary(content, type = "TEXT") {
+  const payload = parseMessagePayload(content);
+  const text = payload.text?.trim();
+
+  if (text) {
+    return text;
+  }
+
+  if (type === "IMAGE") {
+    return "Imagen";
+  }
+
+  if (type === "VIDEO") {
+    return "Video";
+  }
+
+  if (type === "AUDIO") {
+    return "Audio";
+  }
+
+  if (type === "FILE") {
+    return payload.attachment?.name || "Archivo";
+  }
+
+  return content || "Mensaje";
+}
+
 function sortByLastActivity(conversations) {
   return [...conversations].sort((a, b) => {
     if (!a.time && b.time) return 1;
@@ -253,7 +298,7 @@ async function normalizeBackendConversation(conversation, currentProfile, messag
     friendId: otherParticipantId || null,
     name,
     avatar: getAvatar(otherParticipant || name),
-    lastMessage: lastMessage?.content || "Aun no hay mensajes",
+    lastMessage: lastMessage ? getMessageSummary(lastMessage.content, lastMessage.type) : "Aun no hay mensajes",
     time: formatMessageTime(lastMessage?.createdAt || conversation.updatedAt),
     unread: 0,
     online: status === "ONLINE",
@@ -422,7 +467,9 @@ export const chatService = {
     return currentIndex >= 0 ? state.conversations[currentIndex] : conversation;
   },
 
-  sendMessage: async (conversationId, content) => {
+  sendMessage: async (conversationId, content, type = "TEXT") => {
+    const lastMessage = getMessageSummary(content, type);
+
     if (isLocalConversation(conversationId)) {
       await delay();
       const id = String(conversationId);
@@ -431,6 +478,7 @@ export const chatService = {
         id: createId("message"),
         sender: "Tu",
         content,
+        type,
         time: nowTime(),
         mine: true,
       };
@@ -442,7 +490,7 @@ export const chatService = {
       state.messages[id].push(newMessage);
       state.conversations = state.conversations.map((conversation) => (
         conversation.id === id
-          ? { ...conversation, lastMessage: content, time: newMessage.time, unread: 0 }
+          ? { ...conversation, lastMessage, time: newMessage.time, unread: 0 }
           : conversation
       ));
 
@@ -459,7 +507,7 @@ export const chatService = {
         conversationId,
         senderId: currentProfile.userID,
         content,
-        type: "TEXT",
+        type,
       },
     });
 
@@ -473,6 +521,7 @@ export const chatService = {
       messageId: normalizedMessage.id,
       senderId: currentProfile.userID,
       content: normalizedMessage.content,
+      messageType: normalizedMessage.type,
       occurredAt: normalizedMessage.createdAt || new Date().toISOString(),
     });
 

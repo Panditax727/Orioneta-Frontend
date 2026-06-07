@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, Menu, MessageSquare, Palette, Search, Settings, Store, Users, X } from "lucide-react";
+import { Bell, LogOut, Menu, MessageSquare, Search, Settings, Store, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
 import ChatUtilityPanel from "./ChatUtilityPanel";
-import CustomizationPanel from "../../customization/components/CustomizationPanel";
 import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
 import SettingsPanel from "../../settings/components/SettingsPanel";
 import { useRealtimeConnection } from "../../realtime/hooks/useRealtimeConnection";
@@ -29,15 +28,20 @@ export default function ChatLayout() {
   useRealtimeConnection();
   const sessionIdentity = getSessionIdentity(session);
   const sessionIdentityRef = useRef(sessionIdentity);
-  const userInitial = session?.email?.trim()?.charAt(0)?.toUpperCase() || "O";
+  const sessionProfile = session?.profile;
+  const userDisplayName = sessionProfile?.displayName
+    || sessionProfile?.userName
+    || sessionProfile?.email
+    || session?.email
+    || "Orioneta";
+  const userInitial = userDisplayName.trim().charAt(0).toUpperCase() || "O";
+  const userProfilePhoto = sessionProfile?.profilePhoto || "";
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
   const panelWidth = activeSection === "settings"
     ? 720
     : activeSection === "neta-market"
     ? 360
-    : activeSection === "customization"
-      ? 340
-      : 280;
+    : 280;
   const panelStyle = {
     position: isMobile ? "fixed" : "relative",
     left: isMobile ? 0 : "auto",
@@ -194,13 +198,6 @@ export default function ChatLayout() {
         />
 
         <NavIcon
-          active={activeSection === "customization"}
-          onClick={() => handleSectionChange("customization")}
-          tooltip="Personalizacion"
-          icon={<Palette size={20} />}
-        />
-
-        <NavIcon
           active={activeSection === "neta-market"}
           onClick={() => handleSectionChange("neta-market")}
           tooltip="Neta Market"
@@ -224,8 +221,10 @@ export default function ChatLayout() {
 
         <NavDivider />
 
-        <div title={session?.email || "Sesion de Orioneta"} style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white", fontWeight: 600, marginTop: 8 }}>
-          {userInitial}
+        <div title={userDisplayName || "Sesion de Orioneta"} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white", fontWeight: 600, marginTop: 8 }}>
+          {userProfilePhoto ? (
+            <img src={userProfilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : userInitial}
         </div>
       </nav>
 
@@ -256,13 +255,8 @@ export default function ChatLayout() {
           ) : activeSection === "settings" ? (
             <SettingsPanel
               key={`settings-${sessionIdentity}`}
-              onLogout={handleLogout}
-              style={panelStyle}
-            />
-          ) : activeSection === "customization" ? (
-            <CustomizationPanel
-              key={`customization-${sessionIdentity}-${selectedConversation?.id || "none"}`}
               selectedConversation={selectedConversation}
+              onLogout={handleLogout}
               style={panelStyle}
             />
           ) : activeSection === "neta-market" ? (
