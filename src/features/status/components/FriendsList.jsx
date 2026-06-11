@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, MoreVertical } from "lucide-react";
+import { Copy, MessageCircle, MoreVertical, Search, Trash2 } from "lucide-react";
+import { copyToClipboard } from "../../../shared/utils/helpers";
 
 const STATUS_COLORS = {
   online: "#22c55e",
@@ -15,12 +16,15 @@ const STATUS_LABELS = {
   offline: "Desconectado",
 };
 
-export default function FriendsList({ friends, onFriendClick }) {
+export default function FriendsList({ friends, onFriendClick, onRemoveFriend }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [notice, setNotice] = useState("");
 
   const filteredFriends = friends.filter(friend => {
-    const matchesSearch = friend.name.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (friend.name || "")
+      .toLowerCase()
+      .includes(search.toLowerCase());
     const matchesFilter = filter === "all" || friend.status === filter;
     return matchesSearch && matchesFilter;
   });
@@ -89,6 +93,12 @@ export default function FriendsList({ friends, onFriendClick }) {
             </button>
           ))}
         </div>
+
+        {notice && (
+          <p style={{ color: "#a78bfa", fontSize: 11, margin: "9px 0 0" }}>
+            {notice}
+          </p>
+        )}
       </div>
 
       {/* List */}
@@ -105,6 +115,13 @@ export default function FriendsList({ friends, onFriendClick }) {
               key={friend.id}
               friend={friend}
               onClick={() => onFriendClick?.(friend)}
+              onCopy={(value, message) => {
+                copyToClipboard(value).then((copied) => {
+                  setNotice(copied ? message : "No se pudo copiar");
+                  window.setTimeout(() => setNotice(""), 2200);
+                });
+              }}
+              onRemove={() => onRemoveFriend?.(friend)}
             />
           ))
         )}
@@ -113,16 +130,45 @@ export default function FriendsList({ friends, onFriendClick }) {
   );
 }
 
-function FriendItem({ friend, onClick }) {
+function FriendItem({ friend, onClick, onCopy, onRemove }) {
   const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleOpenChat = () => {
+    setMenuOpen(false);
+    onClick?.();
+  };
+
+  const handleCopyFriendCode = () => {
+    if (friend.friendCode) {
+      onCopy?.(friend.friendCode, "Friend code copiado");
+    }
+
+    setMenuOpen(false);
+  };
+
+  const handleCopyEmail = () => {
+    if (friend.email) {
+      onCopy?.(friend.email, "Email copiado");
+    }
+
+    setMenuOpen(false);
+  };
+
+  const handleRemove = () => {
+    setMenuOpen(false);
+    onRemove?.();
+  };
 
   return (
     <div
-      onClick={onClick}
+      onClick={handleOpenChat}
+      onDoubleClick={handleOpenChat}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
+        position: "relative",
         alignItems: "center",
         gap: 12,
         padding: "10px 12px",
@@ -191,6 +237,12 @@ function FriendItem({ friend, onClick }) {
             {friend.name}
           </span>
           <button
+            type="button"
+            title="Acciones de amigo"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen((current) => !current);
+            }}
             style={{
               background: "none",
               border: "none",
@@ -204,6 +256,39 @@ function FriendItem({ friend, onClick }) {
             <MoreVertical size={16} />
           </button>
         </div>
+
+        {menuOpen && (
+          <>
+            <div
+              onClick={(event) => {
+                event.stopPropagation();
+                setMenuOpen(false);
+              }}
+              style={{ position: "fixed", inset: 0, zIndex: 900 }}
+            />
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                position: "absolute",
+                right: 12,
+                top: 46,
+                zIndex: 901,
+                width: 176,
+                padding: 6,
+                borderRadius: 10,
+                background: "#10111a",
+                border: "1px solid #1e2030",
+                boxShadow: "0 18px 36px rgba(0,0,0,0.28)",
+              }}
+            >
+              <MenuAction icon={<MessageCircle size={14} />} label="Abrir chat" onClick={handleOpenChat} />
+              <MenuAction icon={<Copy size={14} />} label="Copiar friend code" disabled={!friend.friendCode} onClick={handleCopyFriendCode} />
+              <MenuAction icon={<Copy size={14} />} label="Copiar email" disabled={!friend.email} onClick={handleCopyEmail} />
+              <MenuAction danger icon={<Trash2 size={14} />} label="Eliminar amigo" onClick={handleRemove} />
+            </div>
+          </>
+        )}
+
         <p
           style={{
             color: friend.status === "online" ? "#22c55e" : "#565f89",
@@ -215,5 +300,42 @@ function FriendItem({ friend, onClick }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function MenuAction({ icon, label, danger, disabled, onClick }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: "100%",
+        minHeight: 32,
+        border: "none",
+        borderRadius: 7,
+        background: "transparent",
+        color: disabled ? "#2d2f45" : danger ? "#ef4444" : "#c0caf5",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 8px",
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer",
+        textAlign: "left",
+      }}
+      onMouseEnter={(event) => {
+        if (!disabled) {
+          event.currentTarget.style.background = "#1a1b26";
+        }
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.background = "transparent";
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

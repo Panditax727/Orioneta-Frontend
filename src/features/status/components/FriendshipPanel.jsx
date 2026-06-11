@@ -26,6 +26,7 @@ export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }
     acceptFriendRequest,
     rejectFriendRequest,
     cancelFriendRequest,
+    removeFriend,
   } = usePresence();
 
   const [target, setTarget] = useState("");
@@ -75,26 +76,58 @@ export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }
     try {
       setBusy(true);
       setNotice("");
-      await action();
+      const result = await action();
       setNotice(successMessage);
+      return result;
     } catch (requestError) {
       setNotice(requestError.message || "No se pudo actualizar la solicitud");
+      return null;
     } finally {
       setBusy(false);
     }
   };
 
   const handleOpenFriend = (friend) => {
+    const friendId = friend.userID || friend.targetUserId || friend.friendId || friend.id;
+
     onFriendClick?.({
-      id: friend.id,
-      friendId: friend.id,
+      ...friend,
+      id: friendId,
+      friendId,
+      targetUserId: friendId,
       name: friend.name,
       avatar: friend.avatar,
+      profilePhoto: friend.profilePhoto,
+      friend: friend.raw?.friend || friend.friend || friend,
       lastMessage: "Aun no hay mensajes",
       time: "",
       unread: 0,
       online: friend.status === "online",
     });
+  };
+
+  const handleAcceptRequest = async (request) => {
+    const accepted = await runRequestAction(
+      () => acceptFriendRequest(request.id),
+      "Solicitud aceptada",
+    );
+
+    if (accepted) {
+      handleOpenFriend(profileToFriend(request.sender));
+    }
+  };
+
+  const handleRemoveFriend = async (friend) => {
+    try {
+      setBusy(true);
+      setNotice("");
+      await removeFriend(friend.userID || friend.targetUserId || friend.id);
+      setNotice("Amigo eliminado");
+    } catch (requestError) {
+      setNotice(requestError.message || "No se pudo eliminar el amigo");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -169,10 +202,7 @@ export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }
               label={requestUserName(request, "received")}
               detail="Quiere agregarte"
               disabled={busy}
-              onAccept={() => runRequestAction(
-                () => acceptFriendRequest(request.id),
-                "Solicitud aceptada",
-              )}
+              onAccept={() => handleAcceptRequest(request)}
               onReject={() => runRequestAction(
                 () => rejectFriendRequest(request.id),
                 "Solicitud rechazada",
@@ -201,11 +231,42 @@ export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }
             Cargando amistades...
           </div>
         ) : (
-          <FriendsList friends={friends} onFriendClick={handleOpenFriend} />
+          <FriendsList
+            friends={friends}
+            onFriendClick={handleOpenFriend}
+            onRemoveFriend={handleRemoveFriend}
+          />
         )}
       </div>
     </aside>
   );
+}
+
+function profileToFriend(profile) {
+  if (!profile) {
+    return {
+      id: null,
+      name: "Usuario",
+      avatar: "U",
+      status: "offline",
+      activity: "Desconectado",
+    };
+  }
+
+  const name = profile.displayName || profile.userName || profile.username || profile.email || "Usuario";
+
+  return {
+    ...profile,
+    id: profile.userID || profile.id || profile.userId,
+    userID: profile.userID || profile.id || profile.userId,
+    targetUserId: profile.userID || profile.id || profile.userId,
+    name,
+    avatar: name.trim().charAt(0).toUpperCase() || "U",
+    profilePhoto: profile.profilePhoto || profile.avatarUrl || "",
+    status: profile.status === "ONLINE" ? "online" : "offline",
+    activity: profile.status === "ONLINE" ? "En linea" : "Desconectado",
+    friend: profile,
+  };
 }
 
 function RequestRow({ label, detail, disabled, onAccept, onReject, onCancel }) {
