@@ -226,7 +226,7 @@ export default function UserProfile({ profile, onUpdateStatus, onOpenSettings })
           <ProfileSetting label="Friend code" value={profile.friendCode || "No disponible"} />
           <ProfileSetting label="Email" value={profile.email || "No disponible"} />
           <p style={{ color: "#565f89", fontSize: 11, margin: "8px 0 0" }}>
-            El ID interno se mantiene oculto porque solo sirve para integraciones tecnicas.
+            Comparte tu friend code para que puedan encontrarte sin exponer datos innecesarios.
           </p>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import heroImage from "../../../assets/Orioneta-Hero.png";
 import logoImage from "../../../assets/logo.png";
 
@@ -45,6 +46,7 @@ export default function AuthShell({
 
         <p className="auth-footer">
           © 2026 Orioneta. Hecho para conectar personas.
+          <Link to="/privacidad">Privacidad y datos</Link>
         </p>
       </section>
 

@@ -1,7 +1,8 @@
 import { getSession } from "../features/auth/session";
 
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080"
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com"
 ).replace(/\/$/, "");
 
 export class ApiError extends Error {
@@ -49,7 +50,7 @@ export async function apiRequest(path, options = {}) {
     });
   } catch (error) {
     throw new ApiError(
-      "No se pudo conectar con el backend. Revisa VITE_API_BASE_URL y que el gateway este levantado.",
+      "No pudimos conectar con Orioneta. Revisa tu conexion e intentalo nuevamente.",
       0,
       error,
     );
@@ -67,8 +68,8 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) {
     const message =
       typeof data === "object" && data !== null
-        ? data.message || data.error || "No se pudo completar la solicitud"
-        : data || "No se pudo completar la solicitud";
+        ? data.message || data.error || "No pudimos completar la accion"
+        : data || "No pudimos completar la accion en este momento";
 
     throw new ApiError(message, response.status, data);
   }

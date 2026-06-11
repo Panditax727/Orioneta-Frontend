@@ -1,6 +1,6 @@
-// Constantes de la aplicación
+// Constantes compartidas de la aplicación.
 
-// API Endpoints (para cuando se conecte al backend)
+// Rutas usadas por los servicios de Orioneta.
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: "/api/auth/login",

@@ -154,7 +154,7 @@ export default function FriendshipPanel({ onFriendClick, onOpenSettings, style }
             <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 600, margin: 0 }}>
               Friend code
             </p>
-            <p style={{ color: "#a78bfa", fontSize: 13, letterSpacing: 1.2, fontWeight: 700, margin: "2px 0 0" }}>
+            <p style={{ color: "#a78bfa", fontSize: 13, letterSpacing: 0, fontWeight: 700, margin: "2px 0 0" }}>
               {userProfile?.friendCode || "Preparando perfil..."}
             </p>
           </div>

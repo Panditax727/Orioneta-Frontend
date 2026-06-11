@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { FaGithub, FaGoogle } from "react-icons/fa";
+import { Link, useNavigate } from "react-router-dom";
+import logoImage from "../../../assets/logo.png";
+import {
+  DEFAULT_OAUTH_PROVIDERS,
+  getOAuthProviders,
+  mergeOAuthProviders,
+  redirectToOAuth,
+  register,
+} from "../../../services/authService";
+import { ensureCurrentUserProfile } from "../../../services/userService";
 import Button from "../../../shared/components/Button";
 import Input from "../../../shared/components/Input";
 import Loader from "../../../shared/components/Loader";
@@ -10,20 +19,11 @@ import {
   validateEmail,
   validatePassword,
 } from "../../../shared/utils/validators";
-import {
-  DEFAULT_OAUTH_PROVIDERS,
-  getOAuthProviders,
-  mergeOAuthProviders,
-  redirectToOAuth,
-  register,
-} from "../../../services/authService";
 import { saveSession } from "../session";
-import { ensureCurrentUserProfile } from "../../../services/userService";
 import AuthShell from "./AuthShell";
-import logoImage from "../../../assets/logo.png";
 
 const OAUTH_ICONS = {
-  google: { Icon: FaGoogle, color: "#4285F4" },
+  google: { Icon: FaGoogle, color: "#ffffff" },
   github: { Icon: FaGithub, color: "#ffffff" },
 };
 
@@ -37,6 +37,7 @@ export default function RegisterPage() {
   });
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState("");
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthProviders, setOauthProviders] = useState(DEFAULT_OAUTH_PROVIDERS);
 
@@ -59,6 +60,9 @@ export default function RegisterPage() {
       displayName: validateDisplayName(form.displayName),
       email: validateEmail(form.email),
       password: validatePassword(form.password),
+      privacy: acceptedPrivacy
+        ? null
+        : "Debes aceptar el acuerdo para crear tu cuenta",
     };
 
     setErrors(nextErrors);
@@ -104,19 +108,19 @@ export default function RegisterPage() {
     try {
       redirectToOAuth(providerId, oauthProviders);
     } catch (error) {
-      setApiError(error.message || "No se pudo iniciar OAuth");
+      setApiError(error.message || "No se pudo continuar con ese proveedor");
     }
   };
 
   return (
     <AuthShell
-      eyebrow="Unete a Orioneta"
+      eyebrow="Tu lugar en Orioneta"
       title={
         <>
           Crea tu cuenta en <span>Orioneta</span>
         </>
       }
-      subtitle="Tu universo de conversaciones privadas, grupos y personalizacion te espera."
+      subtitle="Crea tu perfil, encuentra a tus amigos y abre conversaciones que se sienten tuyas."
     >
       <div className="auth-card-header">
         <div className="auth-logo-large">
@@ -125,7 +129,7 @@ export default function RegisterPage() {
         <h1>
           Bienvenido a <span>bordo</span>
         </h1>
-        <p>Crea tu cuenta gratuita</p>
+        <p>Empieza con una identidad clara y privada</p>
       </div>
 
       {apiError && <div className="auth-alert">{apiError}</div>}
@@ -174,7 +178,9 @@ export default function RegisterPage() {
           rightElement={
             <button
               type="button"
-              aria-label={showPassword ? "Ocultar contrasena" : "Ver contrasena"}
+              aria-label={
+                showPassword ? "Ocultar contrasena" : "Ver contrasena"
+              }
               onClick={() => setShowPassword((current) => !current)}
               className="auth-input-icon-button"
               disabled={loading}
@@ -194,11 +200,29 @@ export default function RegisterPage() {
             "Crear cuenta"
           )}
         </Button>
+
+        <label className="auth-consent">
+          <input
+            type="checkbox"
+            checked={acceptedPrivacy}
+            onChange={(event) => {
+              setAcceptedPrivacy(event.target.checked);
+              setErrors((current) => ({ ...current, privacy: null }));
+            }}
+            disabled={loading}
+          />
+          <span>
+            Acepto el{" "}
+            <Link to="/privacidad">Acuerdo de privacidad y datos</Link>.
+          </span>
+        </label>
+
+        {errors.privacy && <p className="auth-field-error">{errors.privacy}</p>}
       </form>
 
       <div className="auth-divider">
         <span />
-        <p>o registrate con</p>
+        <p>o entra con</p>
         <span />
       </div>
 

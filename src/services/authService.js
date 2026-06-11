@@ -63,7 +63,7 @@ export function redirectToOAuth(providerId, providers = DEFAULT_OAUTH_PROVIDERS)
   );
 
   if (!provider) {
-    throw new Error("Proveedor OAuth no disponible");
+    throw new Error("Ese proveedor no esta disponible ahora");
   }
 
   if (provider.enabled === false) {

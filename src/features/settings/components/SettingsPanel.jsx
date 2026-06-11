@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Copy,
+  ExternalLink,
   ImagePlus,
   LogOut,
   MessageCircle,
@@ -414,7 +415,8 @@ function AccountSection({ profile, onCopyFriendCode }) {
         <span style={infoValueStyle}>{profile?.email || "No disponible"}</span>
       </InfoRow>
       <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: "14px 0 0" }}>
-        El ID interno se mantiene oculto porque solo sirve para integraciones tecnicas.
+        Comparte tu friend code cuando quieras que alguien te agregue. Los
+        identificadores internos no se muestran para mantener la interfaz limpia.
       </p>
     </section>
   );
@@ -424,6 +426,16 @@ function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
   return (
     <form onSubmit={onSave}>
       <SectionHeader title="Privacidad" subtitle="Controla como aparece tu cuenta para otros usuarios." />
+      <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
+        <PrivacyInfoCard
+          title="Tu friend code es publico si lo compartes"
+          text="Sirve para que otras personas te encuentren sin mostrar datos largos o dificiles de recordar."
+        />
+        <PrivacyInfoCard
+          title="Tu perfil puede ser mas reservado"
+          text="La visibilidad controla cuanto aparece tu cuenta cuando otros usuarios te buscan."
+        />
+      </div>
       <Field label="Visibilidad de cuenta">
         <select
           value={form.visibility}
@@ -438,8 +450,30 @@ function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
           ))}
         </select>
       </Field>
+      <a
+        href="/privacidad"
+        target="_blank"
+        rel="noreferrer"
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#a78bfa", fontSize: 12, fontWeight: 800, textDecoration: "none", marginTop: 4 }}
+      >
+        Ver acuerdo de privacidad y datos
+        <ExternalLink size={13} />
+      </a>
       <SaveButton dirty={dirty} saving={saving} loading={loading} />
     </form>
+  );
+}
+
+function PrivacyInfoCard({ title, text }) {
+  return (
+    <div style={{ padding: 12, borderRadius: 8, background: "#10111a", border: "1px solid #1e2030" }}>
+      <p style={{ color: "#c0caf5", fontSize: 12, fontWeight: 800, margin: "0 0 4px" }}>
+        {title}
+      </p>
+      <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: 0 }}>
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -553,7 +587,7 @@ function AppearanceSection({
         </>
       ) : (
         <div style={{ padding: 14, background: "#10111a", border: "1px solid #1e2030", borderRadius: 8, color: "#565f89", fontSize: 12, lineHeight: 1.45 }}>
-          Selecciona un chat guardado en backend para ajustar fondo, burbujas y tamano de texto.
+          Abre una conversacion para ajustar fondo, burbujas y tamano de texto.
         </div>
       )}
     </section>

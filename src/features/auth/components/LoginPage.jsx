@@ -1,14 +1,8 @@
+import { Eye, EyeOff, Lock, MessageCircle, Palette, Users } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Cloud, Eye, EyeOff, Lock, MessageCircle, Users } from "lucide-react";
 import { FaGithub, FaGoogle } from "react-icons/fa";
-import Button from "../../../shared/components/Button";
-import Input from "../../../shared/components/Input";
-import Loader from "../../../shared/components/Loader";
-import {
-  validateEmail,
-  validateRequiredPassword,
-} from "../../../shared/utils/validators";
+import { Link, useNavigate } from "react-router-dom";
+import logoImage from "../../../assets/logo.png";
 import {
   DEFAULT_OAUTH_PROVIDERS,
   getOAuthProviders,
@@ -16,36 +10,42 @@ import {
   mergeOAuthProviders,
   redirectToOAuth,
 } from "../../../services/authService";
-import { saveSession } from "../session";
 import { ensureCurrentUserProfile } from "../../../services/userService";
+import Button from "../../../shared/components/Button";
+import Input from "../../../shared/components/Input";
+import Loader from "../../../shared/components/Loader";
+import {
+  validateEmail,
+  validateRequiredPassword,
+} from "../../../shared/utils/validators";
+import { saveSession } from "../session";
 import AuthShell from "./AuthShell";
-import logoImage from "../../../assets/logo.png";
 
 const LOGIN_FEATURES = [
   {
     icon: <MessageCircle size={24} />,
-    title: "Mensajeria en tiempo real",
-    description: "Mensajes, archivos y presencia preparados para el backend.",
+    title: "Conversaciones vivas",
+    description: "Mensajes, archivos y presencia para hablar sin friccion.",
   },
   {
     icon: <Users size={24} />,
-    title: "Grupos privados",
-    description: "Conversaciones privadas y grupos sin comunidades publicas.",
+    title: "Tu circulo, sin ruido",
+    description: "Chats privados y grupos cerrados para la gente que eliges.",
   },
   {
     icon: <Lock size={24} />,
-    title: "JWT propio",
-    description: "Sesion interna de Orioneta despues de email, Google o GitHub.",
+    title: "Acceso seguro",
+    description: "Entra con correo, Google o GitHub manteniendo tu cuenta protegida.",
   },
   {
-    icon: <Cloud size={24} />,
-    title: "Listo para desplegar",
-    description: "Conectado al gateway local o remoto mediante variables de entorno.",
+    icon: <Palette size={24} />,
+    title: "Un espacio con estilo",
+    description: "Personaliza perfil, temas y detalles para sentirlo tuyo.",
   },
 ];
 
 const OAUTH_ICONS = {
-  google: { Icon: FaGoogle, color: "#4285F4" },
+  google: { Icon: FaGoogle, color: "#ffffff" },
   github: { Icon: FaGithub, color: "#ffffff" },
 };
 
@@ -119,7 +119,7 @@ export default function LoginPage() {
     try {
       redirectToOAuth(providerId, oauthProviders);
     } catch (error) {
-      setApiError(error.message || "No se pudo iniciar OAuth");
+      setApiError(error.message || "No se pudo continuar con ese proveedor");
     }
   };
 
@@ -150,7 +150,7 @@ export default function LoginPage() {
         <h1>
           Hola de <span>nuevo</span>
         </h1>
-        <p>Inicia sesion en tu cuenta de Orioneta</p>
+        <p>Vuelve a tus conversaciones</p>
       </div>
 
       {apiError && <div className="auth-alert">{apiError}</div>}
@@ -185,7 +185,9 @@ export default function LoginPage() {
           rightElement={
             <button
               type="button"
-              aria-label={showPassword ? "Ocultar contrasena" : "Ver contrasena"}
+              aria-label={
+                showPassword ? "Ocultar contrasena" : "Ver contrasena"
+              }
               onClick={() => setShowPassword((current) => !current)}
               className="auth-input-icon-button"
               disabled={loading}
@@ -209,7 +211,7 @@ export default function LoginPage() {
 
       <div className="auth-divider">
         <span />
-        <p>o continua con</p>
+        <p>o entra con</p>
         <span />
       </div>
 
@@ -236,6 +238,11 @@ export default function LoginPage() {
 
       <p className="auth-switch">
         No tienes cuenta? <Link to="/register">Crear cuenta</Link>
+      </p>
+
+      <p className="auth-legal-copy">
+        Al continuar aceptas nuestro{" "}
+        <Link to="/privacidad">Acuerdo de privacidad y datos</Link>.
       </p>
     </AuthShell>
   );

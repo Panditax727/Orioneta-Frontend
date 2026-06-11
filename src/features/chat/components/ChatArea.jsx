@@ -258,11 +258,6 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     }
   };
 
-  const showTemporaryNotice = (text) => {
-    setNotice(text);
-    window.setTimeout(() => setNotice(""), 2600);
-  };
-
   const headerActions = [
     {
       icon: <Phone size={18} />,
@@ -388,10 +383,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               }}
             >
               {conversation.backend
-                ? "Backend local"
+                ? "Listo para conversar"
                 : conversation.online
                   ? "En línea"
-                  : "Modo local"}
+                  : "Disponible en este dispositivo"}
             </p>
           </div>
         </div>
@@ -631,11 +626,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
             title="Emojis"
             color="#565f89"
             hoverColor={visuals.accent}
-            onClick={() =>
-              showTemporaryNotice(
-                "Selector de emojis pendiente para la siguiente mejora visual",
-              )
-            }
+            onClick={() => setMessage((current) => `${current}✨`)}
           >
             <Smile size={18} />
           </IconButton>
@@ -1078,7 +1069,7 @@ function CallPanel({
                 fontSize: 12,
               }}
             >
-              {conversationName} • llamada local de prueba
+              {conversationName} • sesion activa en tu navegador
             </p>
           </div>
 
