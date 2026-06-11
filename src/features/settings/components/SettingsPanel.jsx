@@ -6,6 +6,7 @@ import {
   LogOut,
   MessageCircle,
   Palette,
+  Puzzle,
   Save,
   Settings,
   Shield,
@@ -19,7 +20,9 @@ import {
   CHAT_THEME_PRESETS,
   FONT_PRESETS,
   GLOBAL_THEME_PRESETS,
+  MOD_PRESETS,
 } from "../../customization/services/customizationService";
+import ProfileBadges from "../../status/components/ProfileBadges";
 import { statusService } from "../../status/services/statusService";
 import { copyToClipboard } from "../../../shared/utils/helpers";
 import {
@@ -414,6 +417,10 @@ function AccountSection({ profile, onCopyFriendCode }) {
       <InfoRow label="Email">
         <span style={infoValueStyle}>{profile?.email || "No disponible"}</span>
       </InfoRow>
+      <div style={{ marginTop: 14 }}>
+        <p style={fieldLabelStyle}>Insignias</p>
+        <ProfileBadges badges={profile?.badges} max={5} />
+      </div>
       <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: "14px 0 0" }}>
         Comparte tu friend code cuando quieras que alguien te agregue. Los
         identificadores internos no se muestran para mantener la interfaz limpia.
@@ -545,6 +552,42 @@ function AppearanceSection({
         />
       </SettingRow>
 
+      <SectionTitle icon={<Puzzle size={15} />} title="Mods" />
+
+      <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+        {MOD_PRESETS.map((mod) => {
+          const enabled = userCustomization?.enabledMods?.includes(mod.id);
+          const nextMods = enabled
+            ? userCustomization.enabledMods.filter((modId) => modId !== mod.id)
+            : [...(userCustomization?.enabledMods || []), mod.id];
+
+          return (
+            <div
+              key={mod.id}
+              onClick={() => {
+                if (!saving) {
+                  onUpdate({ enabledMods: nextMods }, `${mod.name} actualizado`);
+                }
+              }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, borderRadius: 8, border: `1px solid ${enabled ? visuals.accent : "#1e2030"}`, background: enabled ? "#1a1b26" : "#10111a", cursor: saving ? "wait" : "pointer", textAlign: "left" }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", color: "#c0caf5", fontSize: 13, fontWeight: 800 }}>
+                  {mod.name}
+                </span>
+                <span style={{ display: "block", color: "#565f89", fontSize: 12, lineHeight: 1.45, marginTop: 2 }}>
+                  {mod.description}
+                </span>
+              </span>
+              <Toggle
+                checked={enabled}
+                onChange={() => onUpdate({ enabledMods: nextMods }, `${mod.name} actualizado`)}
+              />
+            </div>
+          );
+        })}
+      </div>
+
       <SectionTitle icon={<MessageCircle size={15} />} title="Chat actual" />
 
       {canCustomizeChat ? (
@@ -655,7 +698,14 @@ function InfoRow({ label, children }) {
 
 function Toggle({ checked, onChange }) {
   return (
-    <button type="button" onClick={onChange} style={{ width: 42, height: 24, borderRadius: 999, border: "1px solid #1e2030", background: checked ? "#7c3aed" : "#1a1b26", padding: 2, cursor: "pointer" }}>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange?.();
+      }}
+      style={{ width: 42, height: 24, borderRadius: 999, border: "1px solid #1e2030", background: checked ? "#7c3aed" : "#1a1b26", padding: 2, cursor: "pointer" }}
+    >
       <span style={{ display: "block", width: 18, height: 18, borderRadius: "50%", background: "white", transform: checked ? "translateX(18px)" : "translateX(0)", transition: "transform 0.16s ease" }} />
     </button>
   );

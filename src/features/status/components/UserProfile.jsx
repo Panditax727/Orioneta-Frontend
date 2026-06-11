@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Settings, LogOut, Edit2, Check, X } from "lucide-react";
+import ProfileBadges from "./ProfileBadges";
 
 const STATUS_OPTIONS = [
   { value: "online", label: "En línea", color: "#22c55e" },
@@ -70,6 +71,7 @@ export default function UserProfile({ profile, onUpdateStatus, onOpenSettings })
             <span style={{ color: "#c0caf5", fontSize: 15, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {profile.name}
             </span>
+            <ProfileBadges badges={profile.badges} compact max={2} />
           </div>
           <p style={{ color: "#565f89", fontSize: 11, margin: "0 0 4px" }}>
             @{profile.userName || "usuario"}

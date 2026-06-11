@@ -14,6 +14,8 @@ import {
   updateUserStatus,
   updateUserVisibility,
 } from "../../../services/userService";
+import { getSession } from "../../auth/session";
+import { getProfileBadges } from "../utils/profileBadges";
 
 const DOMAIN_TO_UI_STATUS = {
   ONLINE: "online",
@@ -36,7 +38,7 @@ const STATUS_LABELS = {
   offline: "Desconectado",
 };
 
-function toUiProfile(profile) {
+function toUiProfile(profile, session = null) {
   const status = DOMAIN_TO_UI_STATUS[profile.status] || "offline";
   const name = profile.displayName || profile.userName || profile.email || "Usuario";
 
@@ -48,6 +50,8 @@ function toUiProfile(profile) {
     avatar: name.trim().charAt(0).toUpperCase() || "O",
     email: profile.email,
     friendCode: profile.friendCode,
+    role: profile.role,
+    badges: getProfileBadges(profile, session),
     status,
     activity: STATUS_LABELS[status],
     bio: profile.bio,
@@ -92,7 +96,7 @@ export const statusService = {
 
   getUserProfile: async () => {
     const profile = await ensureCurrentUserProfile();
-    return toUiProfile(profile);
+    return toUiProfile(profile, getSession());
   },
 
   updateUserStatus: async (status) => {
@@ -102,7 +106,7 @@ export const statusService = {
       UI_TO_DOMAIN_STATUS[status] || "OFFLINE",
     );
 
-    return toUiProfile(updatedProfile);
+    return toUiProfile(updatedProfile, getSession());
   },
 
   updateUserProfile: async (profileData) => {
@@ -113,14 +117,14 @@ export const statusService = {
       profilePhoto: profileData.profilePhotoReference || profileData.profilePhoto,
     });
 
-    return toUiProfile(updatedProfile);
+    return toUiProfile(updatedProfile, getSession());
   },
 
   updateUserVisibility: async (visibility) => {
     const profile = await ensureCurrentUserProfile();
     const updatedProfile = await updateUserVisibility(profile.userID, visibility);
 
-    return toUiProfile(updatedProfile);
+    return toUiProfile(updatedProfile, getSession());
   },
 
   searchFriends: async (query) => {

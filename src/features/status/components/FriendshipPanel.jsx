@@ -263,6 +263,7 @@ function profileToFriend(profile) {
     name,
     avatar: name.trim().charAt(0).toUpperCase() || "U",
     profilePhoto: profile.profilePhoto || profile.avatarUrl || "",
+    badges: profile.badges || [],
     status: profile.status === "ONLINE" ? "online" : "offline",
     activity: profile.status === "ONLINE" ? "En linea" : "Desconectado",
     friend: profile,

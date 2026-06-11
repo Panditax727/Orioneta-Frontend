@@ -1,6 +1,7 @@
 import {
   Camera,
   CameraOff,
+  Clock,
   FileText,
   Image as ImageIcon,
   MessageSquare,
@@ -13,14 +14,17 @@ import {
   Search,
   Send,
   Smile,
+  Sparkles,
   Video,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCustomization } from "../../customization/hooks/useCustomization";
+import ProfileBadges from "../../status/components/ProfileBadges";
 import { useChat } from "../hooks/useChat";
 
 const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+const QUICK_EMOTES = ["✨", "💜", "🔥", "ok", "dale"];
 
 const DEFAULT_VISUALS = {
   chatBackground: "#0d0e14",
@@ -64,6 +68,13 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const inputPadding = compactMode ? "10px 16px" : "16px 20px";
   const messageGap = compactMode ? 2 : 4;
   const conversationAvatarImage = getAvatarImage(conversation);
+  const enabledMods = useMemo(
+    () => new Set(userCustomization?.enabledMods || []),
+    [userCustomization?.enabledMods],
+  );
+  const quickEmotesEnabled = enabledMods.has("quick-emotes");
+  const ambientChatEnabled = enabledMods.has("ambient-chat");
+  const callStudioEnabled = enabledMods.has("call-studio");
 
   useEffect(() => {
     return () => {
@@ -182,6 +193,16 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       stopMediaStream(callSession?.stream);
       setNotice("");
 
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setNotice("Tu navegador no permite iniciar llamadas desde aqui");
+        return;
+      }
+
+      if (mode === "screen" && !navigator.mediaDevices?.getDisplayMedia) {
+        setNotice("Tu navegador no permite compartir pantalla");
+        return;
+      }
+
       const stream =
         mode === "screen"
           ? await navigator.mediaDevices.getDisplayMedia({
@@ -193,12 +214,23 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               video: mode === "video",
             });
 
+      if (mode === "screen") {
+        stream.getVideoTracks().forEach((track) => {
+          track.addEventListener("ended", () => {
+            setCallSession((current) =>
+              current?.stream === stream ? null : current,
+            );
+          });
+        });
+      }
+
       setCallSession({
         mode,
         stream,
         muted: false,
         cameraOff: false,
         startedAt: new Date(),
+        participantName: conversation.name,
       });
     } catch (callError) {
       const label =
@@ -292,6 +324,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         display: "flex",
         flexDirection: "column",
         background: visuals.chatBackground,
+        backgroundImage: ambientChatEnabled
+          ? "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)"
+          : "none",
+        backgroundSize: ambientChatEnabled ? "28px 28px" : "auto",
         minWidth: 0,
         fontFamily: visuals.fontFamily,
       }}
@@ -364,16 +400,23 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           </div>
 
           <div>
-            <p
-              style={{
-                color: "#c0caf5",
-                fontSize: 14,
-                fontWeight: 600,
-                margin: 0,
-              }}
-            >
-              {conversation.name}
-            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <p
+                style={{
+                  color: "#c0caf5",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  margin: 0,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {conversation.name}
+              </p>
+              <ProfileBadges badges={conversation.badges} compact max={2} />
+            </div>
 
             <p
               style={{
@@ -430,8 +473,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           conversationName={conversation.name}
           callSession={callSession}
           videoRef={callVideoRef}
+          studioEnabled={callStudioEnabled}
           onToggleAudio={toggleAudio}
           onToggleCamera={toggleCamera}
+          onSwitchMode={startCall}
           onEnd={endCall}
         />
       )}
@@ -569,6 +614,17 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           <AttachmentComposerPreview
             attachment={pendingAttachment}
             onRemove={() => setPendingAttachment(null)}
+          />
+        )}
+
+        {quickEmotesEnabled && (
+          <QuickEmoteBar
+            accent={visuals.accent}
+            onSelect={(emote) =>
+              setMessage((current) =>
+                current.trim() ? `${current} ${emote}` : emote,
+              )
+            }
           />
         )}
 
@@ -972,17 +1028,82 @@ function AttachmentComposerPreview({ attachment, onRemove }) {
   );
 }
 
+function QuickEmoteBar({ accent, onSelect }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 10,
+        overflowX: "auto",
+      }}
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          color: "#565f89",
+          fontSize: 11,
+          fontWeight: 800,
+          marginRight: 2,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Sparkles size={12} color={accent} />
+        Rapido
+      </span>
+
+      {QUICK_EMOTES.map((emote) => (
+        <button
+          key={emote}
+          type="button"
+          onClick={() => onSelect(emote)}
+          style={{
+            height: 28,
+            borderRadius: 999,
+            border: "1px solid #1e2030",
+            background: "#13141c",
+            color: "#c0caf5",
+            padding: "0 10px",
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          {emote}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function CallPanel({
   conversationName,
   callSession,
   videoRef,
+  studioEnabled,
   onToggleAudio,
   onToggleCamera,
+  onSwitchMode,
   onEnd,
 }) {
   const isVideoLike =
     callSession.mode === "video" || callSession.mode === "screen";
   const callTitle = getCallTitle(callSession.mode);
+  const [elapsed, setElapsed] = useState(() =>
+    getElapsedSeconds(callSession.startedAt),
+  );
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setElapsed(getElapsedSeconds(callSession.startedAt));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [callSession.startedAt]);
 
   return (
     <div
@@ -1001,6 +1122,43 @@ function CallPanel({
           background: "#0d0e14",
         }}
       >
+        {!isVideoLike && (
+          <div
+            style={{
+              minHeight: 112,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 14,
+              background:
+                "linear-gradient(135deg, rgba(124,58,237,0.12), #05060a)",
+            }}
+          >
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "white",
+              }}
+            >
+              <Phone size={24} />
+            </div>
+            <div>
+              <p style={{ margin: 0, color: "#c0caf5", fontSize: 15, fontWeight: 800 }}>
+                Voz activa
+              </p>
+              <p style={{ margin: "3px 0 0", color: "#565f89", fontSize: 12 }}>
+                Microfono listo para hablar
+              </p>
+            </div>
+          </div>
+        )}
+
         {isVideoLike && (
           <div
             style={{
@@ -1035,7 +1193,9 @@ function CallPanel({
                   fontSize: 13,
                 }}
               >
-                Cámara desactivada
+                {callSession.mode === "screen"
+                  ? "Pantalla pausada"
+                  : "Cámara desactivada"}
               </div>
             )}
           </div>
@@ -1069,11 +1229,53 @@ function CallPanel({
                 fontSize: 12,
               }}
             >
-              {conversationName} • sesion activa en tu navegador
+              {conversationName} • {getCallModeText(callSession.mode)}
+            </p>
+
+            <p
+              style={{
+                margin: "7px 0 0",
+                color: "#8f9ac7",
+                fontSize: 11,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <Clock size={12} />
+              {formatDuration(elapsed)}
             </p>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {studioEnabled && (
+              <>
+                <CallModeButton
+                  active={callSession.mode === "audio"}
+                  title="Cambiar a voz"
+                  onClick={() => onSwitchMode("audio")}
+                >
+                  <Phone size={15} />
+                </CallModeButton>
+
+                <CallModeButton
+                  active={callSession.mode === "video"}
+                  title="Cambiar a video"
+                  onClick={() => onSwitchMode("video")}
+                >
+                  <Video size={15} />
+                </CallModeButton>
+
+                <CallModeButton
+                  active={callSession.mode === "screen"}
+                  title="Compartir pantalla"
+                  onClick={() => onSwitchMode("screen")}
+                >
+                  <MonitorUp size={15} />
+                </CallModeButton>
+              </>
+            )}
+
             <button
               type="button"
               onClick={onToggleAudio}
@@ -1090,7 +1292,13 @@ function CallPanel({
                 type="button"
                 onClick={onToggleCamera}
                 title={
-                  callSession.cameraOff ? "Activar cámara" : "Desactivar cámara"
+                  callSession.mode === "screen"
+                    ? callSession.cameraOff
+                      ? "Reanudar pantalla"
+                      : "Pausar pantalla"
+                    : callSession.cameraOff
+                      ? "Activar cámara"
+                      : "Desactivar cámara"
                 }
                 style={callButtonStyle(
                   callSession.cameraOff ? "#ef4444" : "#1e2030",
@@ -1119,6 +1327,32 @@ function CallPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function CallModeButton({ active, children, title, onClick }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={active}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        border: "1px solid #1e2030",
+        background: active ? "#7c3aed" : "#1e2030",
+        color: active ? "white" : "#8f9ac7",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: active ? "default" : "pointer",
+        opacity: active ? 1 : 0.82,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -1326,6 +1560,33 @@ function getCallTitle(mode) {
   }
 
   return "Llamada de voz activa";
+}
+
+function getCallModeText(mode) {
+  if (mode === "screen") {
+    return "pantalla en uso";
+  }
+
+  if (mode === "video") {
+    return "camara y microfono activos";
+  }
+
+  return "microfono activo";
+}
+
+function getElapsedSeconds(startedAt) {
+  if (!startedAt) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+}
+
+function formatDuration(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function callButtonStyle(background) {

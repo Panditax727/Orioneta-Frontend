@@ -55,11 +55,17 @@ export function normalizeUserProfile(profile) {
     return null;
   }
 
+  const session = getSession();
   const profilePhotoReference = profile.profilePhoto || "";
   const resolvedProfilePhoto = resolveProfilePhoto(profilePhotoReference);
+  const isSessionProfile =
+    session?.profileUserId &&
+    String(session.profileUserId) === String(profile.userID);
 
   return {
     ...profile,
+    role: profile.role || (isSessionProfile ? session.role : undefined),
+    badges: profile.badges || profile.badgeCodes || [],
     profilePhoto: resolvedProfilePhoto,
     profilePhotoReference,
     id: profile.userID,

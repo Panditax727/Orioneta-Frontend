@@ -155,13 +155,14 @@ Crea un archivo `.env` usando el ejemplo incluido:
 cp .env.example .env
 ```
 
-Para backend local:
+Para trabajar contra el servidor actual:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://54.174.224.251:8080
 ```
 
-Para probar contra EC2, usa la URL publica del gateway:
+Si cambias de EC2 o usas un balanceador, reemplaza el valor por la URL publica
+del gateway:
 
 ```env
 VITE_API_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080

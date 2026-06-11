@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
+import ProfileBadges from "../../status/components/ProfileBadges";
 import { useConversations } from "../hooks/useConversations";
 
 export default function Sidebar({
@@ -307,17 +308,24 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            gap: 8,
           }}
         >
-          <span
-            style={{
-              color: selected ? "white" : "#c0caf5",
-              fontSize: 14,
-              fontWeight: item.unread ? 600 : 400,
-            }}
-          >
-            {item.name}
-          </span>
+          <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                color: selected ? "white" : "#c0caf5",
+                fontSize: 14,
+                fontWeight: item.unread ? 600 : 400,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item.name}
+            </span>
+            <ProfileBadges badges={item.badges} compact max={1} />
+          </div>
           <span style={{ color: "#565f89", fontSize: 11 }}>{item.time}</span>
         </div>
         <p

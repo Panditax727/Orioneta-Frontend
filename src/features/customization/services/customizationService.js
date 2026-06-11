@@ -61,6 +61,24 @@ export const BUBBLE_STYLES = [
   { id: "MINIMAL", name: "Minimal" },
 ];
 
+export const MOD_PRESETS = [
+  {
+    id: "quick-emotes",
+    name: "Emotes rapidos",
+    description: "Muestra reacciones cortas junto al compositor.",
+  },
+  {
+    id: "ambient-chat",
+    name: "Ambiente de chat",
+    description: "Agrega una textura suave al fondo de las conversaciones.",
+  },
+  {
+    id: "call-studio",
+    name: "Studio de llamadas",
+    description: "Activa controles ampliados para llamadas y pantalla.",
+  },
+];
+
 const FALLBACK_TEMPLATES = [
   {
     id: "neta-night",
@@ -136,6 +154,7 @@ function defaultUserCustomization(userId) {
     activeFontId: "system",
     animationLevel: 3,
     compactMode: false,
+    enabledMods: ["quick-emotes", "call-studio"],
     localOnly: true,
   };
 }
@@ -160,6 +179,9 @@ function normalizeUserCustomization(customization, userId) {
     userId,
     animationLevel: Number(customization?.animationLevel ?? 3),
     compactMode: Boolean(customization?.compactMode),
+    enabledMods: Array.isArray(customization?.enabledMods)
+      ? customization.enabledMods
+      : defaultUserCustomization(userId).enabledMods,
   };
 }
 

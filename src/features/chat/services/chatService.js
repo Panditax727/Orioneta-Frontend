@@ -6,6 +6,7 @@ import {
   findUserById,
 } from "../../../services/userService";
 import { publishRealtimeEvent } from "../../realtime/services/realtimeService";
+import { getProfileBadges } from "../../status/utils/profileBadges";
 
 const CHAT_STORAGE_KEY = "orioneta.chat.local-state";
 const CHAT_UPDATED_EVENT = "orioneta-chat-updated";
@@ -332,6 +333,11 @@ function normalizeLocalConversation(input) {
       input.profile?.profilePhoto ||
       input.profile?.avatarUrl ||
       "",
+    badges:
+      input.badges ||
+      input.friend?.badges ||
+      input.profile?.badges ||
+      getProfileBadges(input.friend || input.profile || input),
     lastMessage: input.lastMessage || "Aun no hay mensajes",
     time: input.time || "",
     unread: Number(input.unread || 0),
@@ -444,6 +450,7 @@ async function normalizeBackendConversation(
     name,
     avatar: getAvatar(otherParticipant || name),
     avatarPhoto: otherParticipant?.profilePhoto || otherParticipant?.avatarUrl || "",
+    badges: getProfileBadges(otherParticipant),
     lastMessage: lastMessage
       ? getMessageSummary(lastMessage.content, lastMessage.type)
       : "Aun no hay mensajes",
