@@ -239,6 +239,7 @@ export default function Sidebar({
 
 function ConversationItem({ item, isChannel, selected, onClick }) {
   const [hovered, setHovered] = useState(false);
+  const avatarImage = item.avatarPhoto || (isImageReference(item.avatar) ? item.avatar : "");
 
   return (
     <div
@@ -272,9 +273,16 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
             color: "white",
             fontSize: isChannel ? 16 : 14,
             fontWeight: 600,
+            overflow: "hidden",
           }}
         >
-          {isChannel ? "#" : item.avatar}
+          {isChannel ? "#" : avatarImage ? (
+            <img
+              src={avatarImage}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : item.avatar}
         </div>
         {!isChannel && item.online && (
           <div
@@ -348,4 +356,9 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
       )}
     </div>
   );
+}
+
+function isImageReference(value) {
+  return typeof value === "string"
+    && (/^(data:image|blob:|https?:\/\/)/i.test(value));
 }

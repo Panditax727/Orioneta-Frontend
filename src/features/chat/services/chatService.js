@@ -54,10 +54,34 @@ const SEED_CHANNELS = [
 
 const SEED_MESSAGES = {
   "seed-orion": [
-    { id: "seed-message-1", sender: "OrionTheProgrammer", content: "Oye ya terminaste el conversation-service?", time: "12:20", mine: false },
-    { id: "seed-message-2", sender: "Tu", content: "Casi, me falta la infraestructura", time: "12:21", mine: true },
-    { id: "seed-message-3", sender: "OrionTheProgrammer", content: "Dale, yo voy con el user-service", time: "12:22", mine: false },
-    { id: "seed-message-4", sender: "Tu", content: "Ok perfecto, lo vemos manana entonces", time: "12:34", mine: true },
+    {
+      id: "seed-message-1",
+      sender: "OrionTheProgrammer",
+      content: "Oye ya terminaste el conversation-service?",
+      time: "12:20",
+      mine: false,
+    },
+    {
+      id: "seed-message-2",
+      sender: "Tu",
+      content: "Casi, me falta la infraestructura",
+      time: "12:21",
+      mine: true,
+    },
+    {
+      id: "seed-message-3",
+      sender: "OrionTheProgrammer",
+      content: "Dale, yo voy con el user-service",
+      time: "12:22",
+      mine: false,
+    },
+    {
+      id: "seed-message-4",
+      sender: "Tu",
+      content: "Ok perfecto, lo vemos manana entonces",
+      time: "12:34",
+      mine: true,
+    },
   ],
 };
 
@@ -76,7 +100,14 @@ function createId(prefix) {
 }
 
 function nowTime() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function createInitialState() {
@@ -85,10 +116,6 @@ function createInitialState() {
     channels: clone(SEED_CHANNELS),
     messages: clone(SEED_MESSAGES),
   };
-}
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
 }
 
 function readState() {
@@ -102,6 +129,7 @@ function readState() {
 
   try {
     const parsed = JSON.parse(stored);
+
     return {
       conversations: parsed.conversations || [],
       channels: parsed.channels || [],
@@ -123,8 +151,10 @@ function notifyChatUpdated() {
 }
 
 function isLocalConversation(conversationId) {
-  return String(conversationId || "").startsWith("seed-")
-    || String(conversationId || "").startsWith("chat-");
+  return (
+    String(conversationId || "").startsWith("seed-") ||
+    String(conversationId || "").startsWith("chat-")
+  );
 }
 
 async function getCurrentProfileOrNull() {
@@ -139,13 +169,80 @@ async function getCurrentProfileOrNull() {
   }
 }
 
+function getUserId(user) {
+  return user?.id || user?.userId || user?.userID || user?.uuid || null;
+}
+
+function getFriendIdFromInput(input) {
+  return (
+    input?.targetUserId ||
+    input?.friendId ||
+    input?.friendUserId ||
+    input?.userId ||
+    input?.userID ||
+    input?.friend?.id ||
+    input?.friend?.userId ||
+    input?.friend?.userID ||
+    input?.profile?.id ||
+    input?.profile?.userId ||
+    input?.profile?.userID ||
+    input?.friendProfile?.id ||
+    input?.friendProfile?.userId ||
+    input?.friendProfile?.userID ||
+    null
+  );
+}
+
+function getFriendProfileFromInput(input) {
+  if (input?.friend) {
+    return input.friend;
+  }
+
+  if (input?.profile) {
+    return input.profile;
+  }
+
+  if (input?.friendProfile) {
+    return input.friendProfile;
+  }
+
+  return null;
+}
+
 function getDisplayName(user) {
-  return user?.displayName || user?.userName || user?.email || "Usuario Orioneta";
+  return (
+    user?.displayName ||
+    user?.userName ||
+    user?.username ||
+    user?.email ||
+    "Usuario Orioneta"
+  );
 }
 
 function getAvatar(userOrName) {
-  const source = typeof userOrName === "string" ? userOrName : getDisplayName(userOrName);
+  const source =
+    typeof userOrName === "string" ? userOrName : getDisplayName(userOrName);
+
   return source.trim().charAt(0).toUpperCase() || "O";
+}
+
+function normalizeFriendDisplayName(input) {
+  return (
+    input?.name ||
+    input?.displayName ||
+    input?.userName ||
+    input?.username ||
+    input?.email ||
+    input?.friend?.displayName ||
+    input?.friend?.userName ||
+    input?.friend?.username ||
+    input?.friend?.email ||
+    input?.profile?.displayName ||
+    input?.profile?.userName ||
+    input?.profile?.username ||
+    input?.profile?.email ||
+    "Chat privado"
+  );
 }
 
 function formatMessageTime(value) {
@@ -153,7 +250,10 @@ function formatMessageTime(value) {
     return "";
   }
 
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function parseMessagePayload(content) {
@@ -168,7 +268,7 @@ function parseMessagePayload(content) {
       return parsed;
     }
   } catch {
-    // Plain text message.
+    // Mensaje plano.
   }
 
   return { text: content };
@@ -210,18 +310,36 @@ function sortByLastActivity(conversations) {
 }
 
 function normalizeLocalConversation(input) {
-  const name = input.name?.trim() || input.displayName?.trim() || "Nuevo chat";
-  const id = String(input.id || input.friendId || createId("chat"));
+  const name = normalizeFriendDisplayName(input);
+  const friendId = getFriendIdFromInput(input);
+  const id = String(
+    input.conversationId || input.chatId || friendId || createId("chat"),
+  );
 
   return {
     id,
-    friendId: input.friendId || input.id || null,
+    friendId,
     name,
-    avatar: input.avatar || getAvatar(name),
+    avatar:
+      input.avatar ||
+      input.friend?.avatar ||
+      getAvatar(name),
+    avatarPhoto:
+      input.avatarPhoto ||
+      input.profilePhoto ||
+      input.friend?.profilePhoto ||
+      input.friend?.avatarUrl ||
+      input.profile?.profilePhoto ||
+      input.profile?.avatarUrl ||
+      "",
     lastMessage: input.lastMessage || "Aun no hay mensajes",
     time: input.time || "",
     unread: Number(input.unread || 0),
-    online: Boolean(input.online),
+    online: Boolean(
+      input.online ||
+      input.status === "ONLINE" ||
+      input.friend?.status === "ONLINE",
+    ),
     backend: false,
   };
 }
@@ -232,6 +350,7 @@ async function findUserCached(userId) {
   }
 
   const cacheKey = String(userId);
+
   if (userCache.has(cacheKey)) {
     return userCache.get(cacheKey);
   }
@@ -245,15 +364,24 @@ async function findUserCached(userId) {
   }
 }
 
+function getParticipantUserId(participant) {
+  return participant?.userId || participant?.userID || participant?.id || null;
+}
+
 function getParticipantIds(conversation) {
+  if (Array.isArray(conversation.participantIds)) {
+    return conversation.participantIds.filter(Boolean);
+  }
+
   return (conversation.participants || [])
-    .map((participant) => participant.userId)
+    .map(getParticipantUserId)
     .filter(Boolean);
 }
 
 function getOtherParticipantId(conversation, currentUserId) {
-  return getParticipantIds(conversation)
-    .find((participantId) => String(participantId) !== String(currentUserId));
+  return getParticipantIds(conversation).find(
+    (participantId) => String(participantId) !== String(currentUserId),
+  );
 }
 
 async function fetchConversationMessages(conversationId) {
@@ -279,17 +407,34 @@ async function normalizeBackendMessage(message, currentUserId) {
 }
 
 async function normalizeBackendMessages(messages, currentUserId) {
-  return Promise.all((messages || []).map((message) => normalizeBackendMessage(message, currentUserId)));
+  return Promise.all(
+    (messages || []).map((message) =>
+      normalizeBackendMessage(message, currentUserId),
+    ),
+  );
 }
 
-async function normalizeBackendConversation(conversation, currentProfile, messages = null) {
-  const currentUserId = currentProfile.userID;
+async function normalizeBackendConversation(
+  conversation,
+  currentProfile,
+  messages = null,
+) {
+  const currentUserId = getUserId(currentProfile);
+
+  if (!currentUserId) {
+    throw new ApiError("No se pudo identificar al usuario actual", 0);
+  }
+
   const otherParticipantId = getOtherParticipantId(conversation, currentUserId);
   const otherParticipant = await findUserCached(otherParticipantId);
   const rawMessages = messages || [];
   const lastMessage = rawMessages.at(-1);
-  const fallbackName = conversation.type === "PRIVATE_CHAT" ? "Chat privado" : "Grupo";
-  const name = conversation.name?.trim() || getDisplayName(otherParticipant) || fallbackName;
+  const fallbackName =
+    conversation.type === "PRIVATE_CHAT" ? "Chat privado" : "Grupo";
+  const name =
+    conversation.name?.trim() ||
+    getDisplayName(otherParticipant) ||
+    fallbackName;
   const status = otherParticipant?.status;
 
   return {
@@ -298,7 +443,10 @@ async function normalizeBackendConversation(conversation, currentProfile, messag
     friendId: otherParticipantId || null,
     name,
     avatar: getAvatar(otherParticipant || name),
-    lastMessage: lastMessage ? getMessageSummary(lastMessage.content, lastMessage.type) : "Aun no hay mensajes",
+    avatarPhoto: otherParticipant?.profilePhoto || otherParticipant?.avatarUrl || "",
+    lastMessage: lastMessage
+      ? getMessageSummary(lastMessage.content, lastMessage.type)
+      : "Aun no hay mensajes",
     time: formatMessageTime(lastMessage?.createdAt || conversation.updatedAt),
     unread: 0,
     online: status === "ONLINE",
@@ -308,21 +456,37 @@ async function normalizeBackendConversation(conversation, currentProfile, messag
 }
 
 async function getBackendConversations(currentProfile) {
-  const home = await apiRequest(`/api/bff/home/${currentProfile.userID}`);
+  const currentUserId = getUserId(currentProfile);
+
+  if (!currentUserId) {
+    throw new ApiError("No se pudo identificar al usuario actual", 0);
+  }
+
+  const home = await apiRequest(`/api/bff/home/${currentUserId}`);
   const conversations = home.conversations || [];
 
-  return Promise.all(conversations.map(async (conversation) => {
-    const messages = await fetchConversationMessages(conversation.id).catch(() => []);
-    return normalizeBackendConversation(conversation, currentProfile, messages);
-  }));
+  return Promise.all(
+    conversations.map(async (conversation) => {
+      const messages = await fetchConversationMessages(conversation.id).catch(
+        () => [],
+      );
+      return normalizeBackendConversation(
+        conversation,
+        currentProfile,
+        messages,
+      );
+    }),
+  );
 }
 
 async function findExistingPrivateConversation(currentProfile, friendId) {
   const conversations = await getBackendConversations(currentProfile);
 
-  return conversations.find((conversation) => (
-    conversation.type === "PRIVATE_CHAT" && String(conversation.friendId) === String(friendId)
-  ));
+  return conversations.find(
+    (conversation) =>
+      conversation.type === "PRIVATE_CHAT" &&
+      String(conversation.friendId) === String(friendId),
+  );
 }
 
 async function resolveConversationTarget(target) {
@@ -343,12 +507,61 @@ async function resolveConversationTarget(target) {
   return findUserByFriendCode(normalizedTarget.toUpperCase());
 }
 
+async function resolveFriendProfileFromInput(input) {
+  if (!input) {
+    throw new ApiError("No se recibió información del amigo", 0);
+  }
+
+  const embeddedFriendProfile = getFriendProfileFromInput(input);
+
+  if (embeddedFriendProfile) {
+    return embeddedFriendProfile;
+  }
+
+  const friendId = getFriendIdFromInput(input);
+
+  if (friendId && UUID_REGEX.test(String(friendId))) {
+    return findUserById(friendId);
+  }
+
+  if (input.email) {
+    return findUserByEmail(input.email);
+  }
+
+  if (input.friendCode) {
+    return findUserByFriendCode(input.friendCode);
+  }
+
+  const target = input.target || input.name || input.displayName || "";
+
+  if (target) {
+    return resolveConversationTarget(target);
+  }
+
+  throw new ApiError("No se pudo resolver el amigo seleccionado", 0);
+}
+
 async function createBackendPrivateConversation(currentProfile, friendProfile) {
-  if (String(currentProfile.userID) === String(friendProfile.userID)) {
+  const currentUserId = getUserId(currentProfile);
+  const friendUserId = getUserId(friendProfile);
+
+  if (!currentUserId) {
+    throw new ApiError("No se pudo identificar al usuario actual", 0);
+  }
+
+  if (!friendUserId) {
+    throw new ApiError("No se pudo identificar al amigo seleccionado", 0);
+  }
+
+  if (String(currentUserId) === String(friendUserId)) {
     throw new ApiError("No puedes abrir un chat contigo mismo", 400);
   }
 
-  const existingConversation = await findExistingPrivateConversation(currentProfile, friendProfile.userID);
+  const existingConversation = await findExistingPrivateConversation(
+    currentProfile,
+    friendUserId,
+  );
+
   if (existingConversation) {
     return existingConversation;
   }
@@ -359,7 +572,7 @@ async function createBackendPrivateConversation(currentProfile, friendProfile) {
       type: "PRIVATE_CHAT",
       name: "",
       description: "",
-      participantIds: [currentProfile.userID, friendProfile.userID],
+      participantIds: [currentUserId, friendUserId],
     },
   });
 
@@ -388,10 +601,14 @@ export const chatService = {
 
     if (!currentProfile) {
       await delay();
-      return readState().conversations.filter((conversation) => conversation.unread > 0);
+      return readState().conversations.filter(
+        (conversation) => conversation.unread > 0,
+      );
     }
 
-    return (await getBackendConversations(currentProfile)).filter((conversation) => conversation.unread > 0);
+    return (await getBackendConversations(currentProfile)).filter(
+      (conversation) => conversation.unread > 0,
+    );
   },
 
   getMessages: async (conversationId) => {
@@ -401,10 +618,18 @@ export const chatService = {
     }
 
     const currentProfile = await ensureCurrentUserProfile();
-    const query = new URLSearchParams({ userId: currentProfile.userID });
-    const chatView = await apiRequest(`/api/bff/chats/${conversationId}?${query.toString()}`);
+    const currentUserId = getUserId(currentProfile);
 
-    return normalizeBackendMessages(chatView.messages || [], currentProfile.userID);
+    if (!currentUserId) {
+      throw new ApiError("No se pudo identificar al usuario actual", 0);
+    }
+
+    const query = new URLSearchParams({ userId: currentUserId });
+    const chatView = await apiRequest(
+      `/api/bff/chats/${conversationId}?${query.toString()}`,
+    );
+
+    return normalizeBackendMessages(chatView.messages || [], currentUserId);
   },
 
   createDirectConversation: async ({ name, target }) => {
@@ -413,6 +638,7 @@ export const chatService = {
 
     if (!currentProfile) {
       await delay();
+
       const conversation = normalizeLocalConversation({ name: rawTarget });
       const state = readState();
 
@@ -426,7 +652,11 @@ export const chatService = {
     }
 
     const friendProfile = await resolveConversationTarget(rawTarget);
-    const conversation = await createBackendPrivateConversation(currentProfile, friendProfile);
+    const conversation = await createBackendPrivateConversation(
+      currentProfile,
+      friendProfile,
+    );
+
     notifyChatUpdated();
 
     return conversation;
@@ -435,25 +665,36 @@ export const chatService = {
   upsertDirectConversation: async (conversationInput) => {
     const currentProfile = await getCurrentProfileOrNull();
 
-    if (currentProfile && conversationInput.friendId) {
-      const friendProfile = await findUserById(conversationInput.friendId);
-      const conversation = await createBackendPrivateConversation(currentProfile, friendProfile);
+    if (currentProfile) {
+      const friendProfile =
+        await resolveFriendProfileFromInput(conversationInput);
+      const conversation = await createBackendPrivateConversation(
+        currentProfile,
+        friendProfile,
+      );
+
       notifyChatUpdated();
+
       return conversation;
     }
 
     await delay(80);
+
     const conversation = normalizeLocalConversation(conversationInput);
     const state = readState();
-    const currentIndex = state.conversations.findIndex((item) => (
-      item.id === conversation.id || item.friendId === conversation.friendId
-    ));
+
+    const currentIndex = state.conversations.findIndex(
+      (item) =>
+        item.id === conversation.id || item.friendId === conversation.friendId,
+    );
 
     if (currentIndex >= 0) {
       state.conversations[currentIndex] = {
         ...state.conversations[currentIndex],
         ...conversation,
-        lastMessage: state.conversations[currentIndex].lastMessage || conversation.lastMessage,
+        lastMessage:
+          state.conversations[currentIndex].lastMessage ||
+          conversation.lastMessage,
         time: state.conversations[currentIndex].time || conversation.time,
       };
     } else {
@@ -472,8 +713,10 @@ export const chatService = {
 
     if (isLocalConversation(conversationId)) {
       await delay();
+
       const id = String(conversationId);
       const state = readState();
+
       const newMessage = {
         id: createId("message"),
         sender: "Tu",
@@ -488,11 +731,17 @@ export const chatService = {
       }
 
       state.messages[id].push(newMessage);
-      state.conversations = state.conversations.map((conversation) => (
+
+      state.conversations = state.conversations.map((conversation) =>
         conversation.id === id
-          ? { ...conversation, lastMessage, time: newMessage.time, unread: 0 }
-          : conversation
-      ));
+          ? {
+              ...conversation,
+              lastMessage,
+              time: newMessage.time,
+              unread: 0,
+            }
+          : conversation,
+      );
 
       writeState(state);
       notifyChatUpdated();
@@ -501,11 +750,17 @@ export const chatService = {
     }
 
     const currentProfile = await ensureCurrentUserProfile();
+    const currentUserId = getUserId(currentProfile);
+
+    if (!currentUserId) {
+      throw new ApiError("No se pudo identificar al usuario actual", 0);
+    }
+
     const sentMessage = await apiRequest("/api/bff/chats/messages", {
       method: "POST",
       body: {
         conversationId,
-        senderId: currentProfile.userID,
+        senderId: currentUserId,
         content,
         type,
       },
@@ -513,13 +768,16 @@ export const chatService = {
 
     notifyChatUpdated();
 
-    const normalizedMessage = await normalizeBackendMessage(sentMessage, currentProfile.userID);
+    const normalizedMessage = await normalizeBackendMessage(
+      sentMessage,
+      currentUserId,
+    );
 
     publishRealtimeEvent({
       type: "MESSAGE_SENT",
       conversationId,
       messageId: normalizedMessage.id,
-      senderId: currentProfile.userID,
+      senderId: currentUserId,
       content: normalizedMessage.content,
       messageType: normalizedMessage.type,
       occurredAt: normalizedMessage.createdAt || new Date().toISOString(),
@@ -533,11 +791,15 @@ export const chatService = {
 
     if (type === "channels") {
       await delay(80);
+
       const channels = readState().channels;
+
       return {
         dms: [],
         channels: normalizedQuery
-          ? channels.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+          ? channels.filter((item) =>
+              item.name.toLowerCase().includes(normalizedQuery),
+            )
           : channels,
       };
     }
@@ -546,7 +808,9 @@ export const chatService = {
 
     return {
       dms: normalizedQuery
-        ? dms.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+        ? dms.filter((item) =>
+            item.name.toLowerCase().includes(normalizedQuery),
+          )
         : dms,
       channels: [],
     };
@@ -558,15 +822,17 @@ export const chatService = {
     }
 
     await delay(80);
+
     const id = String(conversationId);
     const state = readState();
 
-    state.conversations = state.conversations.map((conversation) => (
-      conversation.id === id ? { ...conversation, unread: 0 } : conversation
-    ));
-    state.channels = state.channels.map((channel) => (
-      channel.id === id ? { ...channel, unread: 0 } : channel
-    ));
+    state.conversations = state.conversations.map((conversation) =>
+      conversation.id === id ? { ...conversation, unread: 0 } : conversation,
+    );
+
+    state.channels = state.channels.map((channel) =>
+      channel.id === id ? { ...channel, unread: 0 } : channel,
+    );
 
     writeState(state);
     notifyChatUpdated();

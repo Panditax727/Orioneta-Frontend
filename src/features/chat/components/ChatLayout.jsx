@@ -1,21 +1,31 @@
-import { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, Menu, MessageSquare, Search, Settings, Store, Users, X } from "lucide-react";
+import {
+  Bell,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Search,
+  Settings,
+  Store,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "./Sidebar";
-import ChatArea from "./ChatArea";
-import ChatUtilityPanel from "./ChatUtilityPanel";
-import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
-import SettingsPanel from "../../settings/components/SettingsPanel";
-import { useRealtimeConnection } from "../../realtime/hooks/useRealtimeConnection";
-import { chatService } from "../services/chatService";
+import logoImage from "../../../assets/logo.png";
 import {
   clearSession,
   getSession,
   getSessionIdentity,
   subscribeToSessionChanges,
 } from "../../auth/session";
+import NetaMarketPanel from "../../customization/components/NetaMarketPanel";
+import { useRealtimeConnection } from "../../realtime/hooks/useRealtimeConnection";
+import SettingsPanel from "../../settings/components/SettingsPanel";
 import FriendshipPanel from "../../status/components/FriendshipPanel";
-import logoImage from "../../../assets/logo.png";
+import { chatService } from "../services/chatService";
+import ChatArea from "./ChatArea";
+import ChatUtilityPanel from "./ChatUtilityPanel";
+import Sidebar from "./Sidebar";
 
 export default function ChatLayout() {
   const navigate = useNavigate();
@@ -24,24 +34,36 @@ export default function ChatLayout() {
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [layoutNotice, setLayoutNotice] = useState("");
   const [session, setSession] = useState(() => getSession());
+
   useRealtimeConnection();
+
   const sessionIdentity = getSessionIdentity(session);
   const sessionIdentityRef = useRef(sessionIdentity);
   const sessionProfile = session?.profile;
-  const userDisplayName = sessionProfile?.displayName
-    || sessionProfile?.userName
-    || sessionProfile?.email
-    || session?.email
-    || "Orioneta";
+
+  const userDisplayName =
+    sessionProfile?.displayName ||
+    sessionProfile?.userName ||
+    sessionProfile?.username ||
+    sessionProfile?.email ||
+    session?.email ||
+    "Orioneta";
+
   const userInitial = userDisplayName.trim().charAt(0).toUpperCase() || "O";
-  const userProfilePhoto = sessionProfile?.profilePhoto || "";
+  const userProfilePhoto =
+    sessionProfile?.profilePhoto || sessionProfile?.avatarUrl || "";
+
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
-  const panelWidth = activeSection === "settings"
-    ? 720
-    : activeSection === "neta-market"
-    ? 360
-    : 280;
+
+  const panelWidth =
+    activeSection === "settings"
+      ? 720
+      : activeSection === "neta-market"
+        ? 360
+        : 280;
+
   const panelStyle = {
     position: isMobile ? "fixed" : "relative",
     left: isMobile ? 0 : "auto",
@@ -50,7 +72,11 @@ export default function ChatLayout() {
     zIndex: isMobile ? 999 : "auto",
     width: isMobile ? "100%" : panelVisible ? `${panelWidth}px` : "0px",
     opacity: panelVisible ? 1 : 0,
-    transform: isMobile ? (panelVisible ? "translateX(0)" : "translateX(-100%)") : "none",
+    transform: isMobile
+      ? panelVisible
+        ? "translateX(0)"
+        : "translateX(-100%)"
+      : "none",
     transition: isMobile
       ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease"
       : "width 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease",
@@ -60,35 +86,43 @@ export default function ChatLayout() {
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
+
       if (window.innerWidth >= 768) {
         setSidebarOpen(false);
       }
     };
-    
+
     checkMobile();
+
     window.addEventListener("resize", checkMobile);
+
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  useEffect(() => subscribeToSessionChanges((nextSession) => {
-    const nextIdentity = getSessionIdentity(nextSession);
+  useEffect(
+    () =>
+      subscribeToSessionChanges((nextSession) => {
+        const nextIdentity = getSessionIdentity(nextSession);
 
-    if (nextIdentity !== sessionIdentityRef.current) {
-      sessionIdentityRef.current = nextIdentity;
-      setSelectedConversation(null);
-      setActiveSection("chats");
-      setSidebarOpen(false);
-    }
+        if (nextIdentity !== sessionIdentityRef.current) {
+          sessionIdentityRef.current = nextIdentity;
+          setSelectedConversation(null);
+          setActiveSection("chats");
+          setSidebarOpen(false);
+        }
 
-    setSession(nextSession);
+        setSession(nextSession);
 
-    if (!nextSession) {
-      navigate("/login", { replace: true });
-    }
-  }), [navigate]);
+        if (!nextSession) {
+          navigate("/login", { replace: true });
+        }
+      }),
+    [navigate],
+  );
 
   const handleSectionChange = (section) => {
     setActiveSection(section);
+
     if (isMobile) {
       setSidebarOpen(true);
       return;
@@ -102,19 +136,69 @@ export default function ChatLayout() {
     navigate("/login", { replace: true });
   };
 
-  const handleFriendConversation = async (friendConversation) => {
-    const conversation = await chatService.upsertDirectConversation(friendConversation);
+  const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
     setActiveSection("chats");
-    if (isMobile) setSidebarOpen(false);
+
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const handleFriendConversation = async (friendConversation) => {
+    try {
+      const conversation =
+        await chatService.upsertDirectConversation(friendConversation);
+
+      setSelectedConversation(conversation);
+      setActiveSection("chats");
+      setLayoutNotice("");
+
+      if (isMobile) {
+        setSidebarOpen(false);
+      }
+    } catch (error) {
+      console.error("No se pudo abrir el chat con el amigo:", error);
+      setLayoutNotice(error?.message || "No se pudo abrir el chat con este amigo");
+      window.setTimeout(() => setLayoutNotice(""), 3200);
+    }
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#0d0e14", overflow: "hidden", position: "relative" }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        background: "#0d0e14",
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      {layoutNotice && (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            top: 16,
+            right: 16,
+            zIndex: 1200,
+            maxWidth: 320,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "rgba(239, 68, 68, 0.13)",
+            border: "1px solid rgba(239, 68, 68, 0.28)",
+            color: "#fecaca",
+            fontSize: 12,
+            boxShadow: "0 18px 36px rgba(0,0,0,0.28)",
+          }}
+        >
+          {layoutNotice}
+        </div>
+      )}
 
-      {/* Mobile menu button */}
       {isMobile && (
         <button
+          type="button"
           onClick={() => setSidebarOpen(!sidebarOpen)}
           style={{
             position: "fixed",
@@ -138,24 +222,32 @@ export default function ChatLayout() {
         </button>
       )}
 
-      {/* Navigation - hidden on mobile when sidebar is open */}
-      <nav 
-        style={{ 
+      <nav
+        style={{
           width: isMobile ? 0 : 64,
-          flexShrink: 0, 
-          background: "#0d0e14", 
-          borderRight: isMobile ? "none" : "1px solid #1e2030", 
-          display: isMobile ? "none" : "flex", 
-          flexDirection: "column", 
-          alignItems: "center", 
+          flexShrink: 0,
+          background: "#0d0e14",
+          borderRight: isMobile ? "none" : "1px solid #1e2030",
+          display: isMobile ? "none" : "flex",
+          flexDirection: "column",
+          alignItems: "center",
           padding: "16px 0",
           gap: 8,
-          transition: "width 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s ease, border-color 0.2s ease",
+          transition:
+            "width 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s ease, border-color 0.2s ease",
           overflow: "hidden",
-        }}>
-
+        }}
+      >
         <div style={{ marginBottom: 16 }}>
-          <img src={logoImage} style={{ width: 36, height: 36, objectFit: "contain" }} alt="Orioneta" />
+          <img
+            src={logoImage}
+            style={{
+              width: 36,
+              height: 36,
+              objectFit: "contain",
+            }}
+            alt="Orioneta"
+          />
         </div>
 
         <NavDivider />
@@ -221,17 +313,41 @@ export default function ChatLayout() {
 
         <NavDivider />
 
-        <div title={userDisplayName || "Sesion de Orioneta"} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white", fontWeight: 600, marginTop: 8 }}>
+        <div
+          title={userDisplayName || "Sesion de Orioneta"}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 14,
+            color: "white",
+            fontWeight: 600,
+            marginTop: 8,
+          }}
+        >
           {userProfilePhoto ? (
-            <img src={userProfilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : userInitial}
+            <img
+              src={userProfilePhoto}
+              alt=""
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            userInitial
+          )}
         </div>
       </nav>
 
-      {/* Sidebar - responsive */}
       {(!isMobile || sidebarOpen) && (
         <>
-          {/* Overlay for mobile */}
           {isMobile && sidebarOpen && (
             <div
               onClick={() => setSidebarOpen(false)}
@@ -244,7 +360,7 @@ export default function ChatLayout() {
               }}
             />
           )}
-          
+
           {activeSection === "friends" ? (
             <FriendshipPanel
               key={`friends-${sessionIdentity}`}
@@ -265,15 +381,12 @@ export default function ChatLayout() {
               selectedConversation={selectedConversation}
               style={panelStyle}
             />
-          ) : activeSection === "search" || activeSection === "notifications" ? (
+          ) : activeSection === "search" ||
+            activeSection === "notifications" ? (
             <ChatUtilityPanel
               key={`${activeSection}-${sessionIdentity}`}
               mode={activeSection}
-              onSelectConversation={(conv) => {
-                setSelectedConversation(conv);
-                setActiveSection("chats");
-                if (isMobile) setSidebarOpen(false);
-              }}
+              onSelectConversation={handleSelectConversation}
               style={panelStyle}
             />
           ) : (
@@ -281,20 +394,16 @@ export default function ChatLayout() {
               key={`sidebar-${sessionIdentity}`}
               activeSection={activeSection}
               selectedConversation={selectedConversation}
-              onSelectConversation={(conv) => {
-                setSelectedConversation(conv);
-                if (isMobile) setSidebarOpen(false);
-              }}
+              onSelectConversation={handleSelectConversation}
               style={panelStyle}
             />
           )}
         </>
       )}
 
-      {/* ChatArea */}
       <ChatArea
         key={`${sessionIdentity}-${selectedConversation?.id || "empty-chat"}`}
-        conversation={selectedConversation} 
+        conversation={selectedConversation}
         isMobile={isMobile}
         onBack={() => {
           if (isMobile) {
@@ -309,13 +418,27 @@ export default function ChatLayout() {
 
 function NavIcon({ icon, active, onClick, tooltip }) {
   const [hovered, setHovered] = useState(false);
+
   return (
     <button
+      type="button"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={tooltip}
-      style={{ width: 40, height: 40, borderRadius: 10, background: active ? "#7c3aed" : hovered ? "#1a1b26" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: active ? "white" : hovered ? "#c0caf5" : "#565f89", transition: "all 0.15s" }}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: active ? "#7c3aed" : hovered ? "#1a1b26" : "transparent",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: active ? "white" : hovered ? "#c0caf5" : "#565f89",
+        transition: "all 0.15s",
+      }}
     >
       {icon}
     </button>
@@ -323,5 +446,14 @@ function NavIcon({ icon, active, onClick, tooltip }) {
 }
 
 function NavDivider() {
-  return <div style={{ width: 32, height: 1, background: "#1e2030", margin: "4px 0" }} />;
+  return (
+    <div
+      style={{
+        width: 32,
+        height: 1,
+        background: "#1e2030",
+        margin: "4px 0",
+      }}
+    />
+  );
 }

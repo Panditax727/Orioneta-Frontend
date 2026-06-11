@@ -63,6 +63,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const messagePadding = compactMode ? "14px 16px" : "20px";
   const inputPadding = compactMode ? "10px 16px" : "16px 20px";
   const messageGap = compactMode ? 2 : 4;
+  const conversationAvatarImage = getAvatarImage(conversation);
 
   useEffect(() => {
     return () => {
@@ -346,6 +347,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               width: 34,
               height: 34,
               borderRadius: "50%",
+              overflow: "hidden",
               background: visuals.accentGradient,
               display: "flex",
               alignItems: "center",
@@ -355,7 +357,15 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               fontWeight: 600,
             }}
           >
-            {conversation.avatar || conversation.name?.[0] || "?"}
+            {conversationAvatarImage ? (
+              <img
+                src={conversationAvatarImage}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              conversation.avatar || conversation.name?.[0] || "?"
+            )}
           </div>
 
           <div>
@@ -428,7 +438,6 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           onToggleAudio={toggleAudio}
           onToggleCamera={toggleCamera}
           onEnd={endCall}
-          visuals={visuals}
         />
       )}
 
@@ -979,7 +988,6 @@ function CallPanel({
   onToggleAudio,
   onToggleCamera,
   onEnd,
-  visuals,
 }) {
   const isVideoLike =
     callSession.mode === "video" || callSession.mode === "screen";
@@ -1151,6 +1159,16 @@ function IconButton({ children, title, color, hoverColor, onClick }) {
       {children}
     </button>
   );
+}
+
+function getAvatarImage(conversation) {
+  const candidate = conversation?.avatarPhoto || conversation?.profilePhoto || conversation?.avatar;
+
+  if (typeof candidate !== "string") {
+    return "";
+  }
+
+  return /^(data:image|blob:|https?:\/\/)/i.test(candidate) ? candidate : "";
 }
 
 function stopMediaStream(stream) {
