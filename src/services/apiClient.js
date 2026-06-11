@@ -2,7 +2,7 @@ import { getSession } from "../features/auth/session";
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ||
-  "http://54.174.224.251:8080"
+  "http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com"
 ).replace(/\/$/, "");
 
 export class ApiError extends Error {

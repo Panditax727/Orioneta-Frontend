@@ -573,17 +573,56 @@ async function createBackendPrivateConversation(currentProfile, friendProfile) {
     return existingConversation;
   }
 
-  const conversation = await apiRequest("/api/bff/chats", {
-    method: "POST",
-    body: {
-      type: "PRIVATE_CHAT",
-      name: "",
-      description: "",
-      participantIds: [currentUserId, friendUserId],
-    },
-  });
+  const payload = {
+    type: "PRIVATE_CHAT",
+    name: "",
+    description: "",
+    participantIds: [currentUserId, friendUserId],
+  };
+
+  const conversation = await createPrivateConversationWithFallback(payload);
 
   return normalizeBackendConversation(conversation, currentProfile, []);
+}
+
+async function createPrivateConversationWithFallback(payload) {
+  try {
+    return await apiRequest("/api/bff/chats", {
+      method: "POST",
+      body: payload,
+    });
+  } catch (error) {
+    if (!shouldUseDirectServiceFallback(error)) {
+      throw error;
+    }
+
+    return apiRequest("/api/conversations", {
+      method: "POST",
+      body: payload,
+    });
+  }
+}
+
+async function sendMessageWithFallback(payload) {
+  try {
+    return await apiRequest("/api/bff/chats/messages", {
+      method: "POST",
+      body: payload,
+    });
+  } catch (error) {
+    if (!shouldUseDirectServiceFallback(error)) {
+      throw error;
+    }
+
+    return apiRequest("/api/messages", {
+      method: "POST",
+      body: payload,
+    });
+  }
+}
+
+function shouldUseDirectServiceFallback(error) {
+  return error instanceof ApiError && (error.status === 0 || error.status >= 500);
 }
 
 export const chatService = {
@@ -763,14 +802,11 @@ export const chatService = {
       throw new ApiError("No se pudo identificar al usuario actual", 0);
     }
 
-    const sentMessage = await apiRequest("/api/bff/chats/messages", {
-      method: "POST",
-      body: {
-        conversationId,
-        senderId: currentUserId,
-        content,
-        type,
-      },
+    const sentMessage = await sendMessageWithFallback({
+      conversationId,
+      senderId: currentUserId,
+      content,
+      type,
     });
 
     notifyChatUpdated();
