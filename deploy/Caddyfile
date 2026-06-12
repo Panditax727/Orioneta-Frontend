@@ -1,5 +1,43 @@
 orioneta.duckdns.org {
 	encode zstd gzip
 
-	reverse_proxy orioneta-frontend:80
+	handle /api/* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle /actuator/* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle /swagger-ui/* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle /v3/api-docs* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle /oauth2/* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle /ws/* {
+		reverse_proxy 10.0.0.236:8080 {
+			header_up -Origin
+		}
+	}
+
+	handle {
+		reverse_proxy orioneta-frontend:80
+	}
 }
