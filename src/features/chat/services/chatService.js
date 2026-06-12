@@ -394,6 +394,10 @@ async function fetchConversationMessages(conversationId) {
   return apiRequest(`/api/messages/conversation/${conversationId}`);
 }
 
+async function fetchUserConversations(userId) {
+  return apiRequest(`/api/conversations/users/${userId}`);
+}
+
 async function normalizeBackendMessage(message, currentUserId) {
   const mine = String(message.senderId) === String(currentUserId);
   const sender = mine ? null : await findUserCached(message.senderId);
@@ -469,8 +473,7 @@ async function getBackendConversations(currentProfile) {
     throw new ApiError("No se pudo identificar al usuario actual", 0);
   }
 
-  const home = await apiRequest(`/api/bff/home/${currentUserId}`);
-  const conversations = home.conversations || [];
+  const conversations = await getConversationListWithFallback(currentUserId);
 
   return Promise.all(
     conversations.map(async (conversation) => {
@@ -484,6 +487,19 @@ async function getBackendConversations(currentProfile) {
       );
     }),
   );
+}
+
+async function getConversationListWithFallback(currentUserId) {
+  try {
+    return await fetchUserConversations(currentUserId);
+  } catch (error) {
+    if (!shouldUseBffFallback(error)) {
+      throw error;
+    }
+
+    const home = await apiRequest(`/api/bff/home/${currentUserId}`);
+    return home.conversations || [];
+  }
 }
 
 async function findExistingPrivateConversation(currentProfile, friendId) {
@@ -587,16 +603,16 @@ async function createBackendPrivateConversation(currentProfile, friendProfile) {
 
 async function createPrivateConversationWithFallback(payload) {
   try {
-    return await apiRequest("/api/bff/chats", {
+    return await apiRequest("/api/conversations", {
       method: "POST",
       body: payload,
     });
   } catch (error) {
-    if (!shouldUseDirectServiceFallback(error)) {
+    if (!shouldUseBffFallback(error)) {
       throw error;
     }
 
-    return apiRequest("/api/conversations", {
+    return apiRequest("/api/bff/chats", {
       method: "POST",
       body: payload,
     });
@@ -605,23 +621,23 @@ async function createPrivateConversationWithFallback(payload) {
 
 async function sendMessageWithFallback(payload) {
   try {
-    return await apiRequest("/api/bff/chats/messages", {
+    return await apiRequest("/api/messages", {
       method: "POST",
       body: payload,
     });
   } catch (error) {
-    if (!shouldUseDirectServiceFallback(error)) {
+    if (!shouldUseBffFallback(error)) {
       throw error;
     }
 
-    return apiRequest("/api/messages", {
+    return apiRequest("/api/bff/chats/messages", {
       method: "POST",
       body: payload,
     });
   }
 }
 
-function shouldUseDirectServiceFallback(error) {
+function shouldUseBffFallback(error) {
   return error instanceof ApiError && (error.status === 0 || error.status >= 500);
 }
 
@@ -670,12 +686,21 @@ export const chatService = {
       throw new ApiError("No se pudo identificar al usuario actual", 0);
     }
 
-    const query = new URLSearchParams({ userId: currentUserId });
-    const chatView = await apiRequest(
-      `/api/bff/chats/${conversationId}?${query.toString()}`,
-    );
+    try {
+      const messages = await fetchConversationMessages(conversationId);
+      return normalizeBackendMessages(messages || [], currentUserId);
+    } catch (error) {
+      if (!shouldUseBffFallback(error)) {
+        throw error;
+      }
 
-    return normalizeBackendMessages(chatView.messages || [], currentUserId);
+      const query = new URLSearchParams({ userId: currentUserId });
+      const chatView = await apiRequest(
+        `/api/bff/chats/${conversationId}?${query.toString()}`,
+      );
+
+      return normalizeBackendMessages(chatView.messages || [], currentUserId);
+    }
   },
 
   createDirectConversation: async ({ name, target }) => {
