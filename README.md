@@ -158,21 +158,21 @@ cp .env.example .env
 Para trabajar contra el servidor actual:
 
 ```env
-VITE_API_BASE_URL=http://54.174.224.251:8080
+VITE_API_BASE_URL=http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com
 ```
 
 Si cambias de EC2 o usas un balanceador, reemplaza el valor por la URL publica
 del gateway:
 
 ```env
-VITE_API_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080
+VITE_API_BASE_URL=http://TU_BALANCEADOR_O_GATEWAY
 ```
 
 El realtime se deriva de `VITE_API_BASE_URL` y usa `/ws/chat`. Si necesitas
 apuntar WebSocket a otra URL, puedes sobrescribirlo:
 
 ```env
-VITE_REALTIME_BASE_URL=http://TU_EC2_PUBLIC_DNS:8080
+VITE_REALTIME_BASE_URL=http://TU_BALANCEADOR_O_GATEWAY
 ```
 
 El frontend espera estos endpoints del gateway:
@@ -195,6 +195,35 @@ ORIONETA_OAUTH2_FAILURE_REDIRECT_URI=http://localhost:5173/auth/oauth2/error
 
 La respuesta de autenticacion debe incluir `accessToken`, `refreshToken`,
 `tokenType`, `expiresInSeconds`, `userId`, `email` y `role`.
+
+### Build de producción
+
+```bash
+npm run build
+```
+
+### Docker
+
+La imagen sirve el frontend compilado con Nginx. Las variables de Vite se
+inyectan al construir la imagen:
+
+```bash
+docker build \
+  --build-arg VITE_API_BASE_URL=http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com \
+  -t orioneta-frontend:latest .
+```
+
+Para probar la imagen:
+
+```bash
+docker run --rm -p 5173:80 orioneta-frontend:latest
+```
+
+Healthcheck:
+
+```text
+http://localhost:5173/health
+```
 
 ---
 
