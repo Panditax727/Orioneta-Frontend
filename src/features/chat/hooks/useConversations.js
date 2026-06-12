@@ -23,7 +23,11 @@ export function useConversations(type = "dms") {
       const data = normalizedType === "dms"
         ? await chatService.getDirectMessages()
         : await chatService.getChannels();
-      setConversations(data);
+      setConversations((currentConversations) => (
+        areConversationsEqual(currentConversations, data)
+          ? currentConversations
+          : data
+      ));
       setError(null);
     } catch (err) {
       if (!silent) {
@@ -93,4 +97,22 @@ export function useConversations(type = "dms") {
     markAsRead,
     refetch: fetchConversations,
   };
+}
+
+function areConversationsEqual(currentConversations, nextConversations) {
+  if (currentConversations.length !== nextConversations.length) {
+    return false;
+  }
+
+  return currentConversations.every((conversation, index) => {
+    const nextConversation = nextConversations[index];
+
+    return conversation.id === nextConversation.id
+      && conversation.name === nextConversation.name
+      && conversation.lastMessage === nextConversation.lastMessage
+      && conversation.time === nextConversation.time
+      && conversation.unread === nextConversation.unread
+      && conversation.avatarPhoto === nextConversation.avatarPhoto
+      && conversation.online === nextConversation.online;
+  });
 }

@@ -228,6 +228,10 @@ function getAvatar(userOrName) {
   return source.trim().charAt(0).toUpperCase() || "O";
 }
 
+function getProfilePhoto(user) {
+  return user?.profilePhoto || user?.avatarUrl || user?.profilePhotoReference || "";
+}
+
 function normalizeFriendDisplayName(input) {
   return (
     input?.name ||
@@ -475,15 +479,22 @@ function getConversationActivityAt(conversation, messages = []) {
   );
 }
 
-async function normalizeBackendMessage(message, currentUserId) {
+async function normalizeBackendMessage(
+  message,
+  currentUserId,
+  currentProfile = null,
+) {
   const mine = String(message.senderId) === String(currentUserId);
-  const sender = mine ? null : await findUserCached(message.senderId);
+  const sender = mine ? currentProfile : await findUserCached(message.senderId);
+  const senderName = mine ? "Tu" : getDisplayName(sender);
 
   return {
     id: message.id,
     conversationId: message.conversationId,
     senderId: message.senderId,
-    sender: mine ? "Tu" : getDisplayName(sender),
+    sender: senderName,
+    senderAvatarPhoto: getProfilePhoto(sender),
+    senderInitial: getAvatar(sender || senderName),
     content: message.content,
     type: message.type,
     status: message.status,
@@ -493,10 +504,10 @@ async function normalizeBackendMessage(message, currentUserId) {
   };
 }
 
-async function normalizeBackendMessages(messages, currentUserId) {
+async function normalizeBackendMessages(messages, currentUserId, currentProfile = null) {
   return Promise.all(
     sortRawMessages(messages || []).map((message) =>
-      normalizeBackendMessage(message, currentUserId),
+      normalizeBackendMessage(message, currentUserId, currentProfile),
     ),
   );
 }
@@ -531,7 +542,7 @@ async function normalizeBackendConversation(
     friendId: otherParticipantId || null,
     name,
     avatar: getAvatar(otherParticipant || name),
-    avatarPhoto: otherParticipant?.profilePhoto || otherParticipant?.avatarUrl || "",
+    avatarPhoto: getProfilePhoto(otherParticipant),
     badges: getProfileBadges(otherParticipant),
     lastMessage: lastMessage
       ? getMessageSummary(lastMessage.content, lastMessage.type)
@@ -884,7 +895,7 @@ export const chatService = {
 
     try {
       const messages = await fetchRelatedConversationMessages(conversationId);
-      return normalizeBackendMessages(messages || [], currentUserId);
+      return normalizeBackendMessages(messages || [], currentUserId, currentProfile);
     } catch (error) {
       if (!shouldUseBffFallback(error)) {
         throw error;
@@ -895,7 +906,11 @@ export const chatService = {
         `/api/bff/chats/${conversationId}?${query.toString()}`,
       );
 
-      return normalizeBackendMessages(chatView.messages || [], currentUserId);
+      return normalizeBackendMessages(
+        chatView.messages || [],
+        currentUserId,
+        currentProfile,
+      );
     }
   },
 
@@ -991,6 +1006,8 @@ export const chatService = {
         type,
         time: nowTime(),
         mine: true,
+        senderAvatarPhoto: "",
+        senderInitial: "T",
       };
 
       if (!state.messages[id]) {
@@ -1036,6 +1053,7 @@ export const chatService = {
     const normalizedMessage = await normalizeBackendMessage(
       sentMessage,
       currentUserId,
+      currentProfile,
     );
 
     publishRealtimeEvent({

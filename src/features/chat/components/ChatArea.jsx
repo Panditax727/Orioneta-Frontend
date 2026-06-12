@@ -23,7 +23,7 @@ import { useCustomization } from "../../customization/hooks/useCustomization";
 import ProfileBadges from "../../status/components/ProfileBadges";
 import { useChat } from "../hooks/useChat";
 
-const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE = 12 * 1024 * 1024;
 const QUICK_EMOTES = ["✨", "💜", "🔥", "ok", "dale"];
 
 const DEFAULT_VISUALS = {
@@ -149,7 +149,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     }
 
     if (file.size > MAX_ATTACHMENT_SIZE) {
-      setNotice("El archivo no puede superar los 8 MB");
+      setNotice("El archivo no puede superar los 12 MB por ahora");
       return;
     }
 
@@ -195,6 +195,11 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setNotice("Tu navegador no permite iniciar llamadas desde aqui");
+        return;
+      }
+
+      if (!window.isSecureContext && window.location.hostname !== "localhost") {
+        setNotice("Las llamadas y pantalla necesitan HTTPS en el navegador");
         return;
       }
 
@@ -607,6 +612,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         <input
           ref={fileInputRef}
           type="file"
+          accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx"
           onChange={handleAttachmentSelect}
           style={{ display: "none" }}
         />
@@ -776,23 +782,12 @@ function MessageBubble({
       }}
     >
       {!msg.mine && (
-        <div
-          style={{
-            width: compactMode ? 24 : 28,
-            height: compactMode ? 24 : 28,
-            borderRadius: "50%",
-            flexShrink: 0,
-            background: visuals.accentGradient,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "white",
-            fontSize: 11,
-            fontWeight: 600,
-          }}
-        >
-          {msg.sender?.[0] || "?"}
-        </div>
+        <MessageAvatar
+          photo={msg.senderAvatarPhoto}
+          initial={msg.senderInitial || msg.sender?.[0] || "?"}
+          compactMode={compactMode}
+          visuals={visuals}
+        />
       )}
 
       <div
@@ -860,9 +855,44 @@ function MessageBubble({
   );
 }
 
+function MessageAvatar({ photo, initial, compactMode, visuals }) {
+  return (
+    <div
+      style={{
+        width: compactMode ? 24 : 28,
+        height: compactMode ? 24 : 28,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: visuals.accentGradient,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
+        fontSize: 11,
+        fontWeight: 700,
+        overflow: "hidden",
+      }}
+    >
+      {photo ? (
+        <img
+          src={photo}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        initial
+      )}
+    </div>
+  );
+}
+
 function MessageAttachment({ attachment, mine, visuals }) {
   const isImage =
     attachment.kind === "image" || attachment.messageType === "IMAGE";
+  const isVideo =
+    attachment.kind === "video" || attachment.messageType === "VIDEO";
+  const isAudio =
+    attachment.kind === "audio" || attachment.messageType === "AUDIO";
   const iconColor = mine ? "white" : visuals.accent;
 
   if (isImage && attachment.dataUrl) {
@@ -895,6 +925,49 @@ function MessageAttachment({ attachment, mine, visuals }) {
     );
   }
 
+  if (isVideo && attachment.dataUrl) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <video
+          controls
+          src={attachment.dataUrl}
+          style={{
+            maxWidth: 320,
+            width: "100%",
+            maxHeight: 240,
+            borderRadius: 12,
+            display: "block",
+            background: "#05060a",
+            border: mine
+              ? "1px solid rgba(255,255,255,0.18)"
+              : "1px solid #1e2030",
+          }}
+        />
+
+        <AttachmentCaption attachment={attachment} mine={mine} />
+      </div>
+    );
+  }
+
+  if (isAudio && attachment.dataUrl) {
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: mine ? "rgba(255,255,255,0.14)" : "#0d0e14",
+          border: mine
+            ? "1px solid rgba(255,255,255,0.16)"
+            : "1px solid #1e2030",
+        }}
+      >
+        <audio controls src={attachment.dataUrl} style={{ width: 260 }} />
+        <AttachmentCaption attachment={attachment} mine={mine} />
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -908,7 +981,13 @@ function MessageAttachment({ attachment, mine, visuals }) {
         border: mine ? "1px solid rgba(255,255,255,0.16)" : "1px solid #1e2030",
       }}
     >
-      <FileText size={18} color={iconColor} />
+      {isVideo ? (
+        <Video size={18} color={iconColor} />
+      ) : isAudio ? (
+        <Mic size={18} color={iconColor} />
+      ) : (
+        <FileText size={18} color={iconColor} />
+      )}
 
       <div style={{ minWidth: 0 }}>
         <p
@@ -940,8 +1019,24 @@ function MessageAttachment({ attachment, mine, visuals }) {
   );
 }
 
+function AttachmentCaption({ attachment, mine }) {
+  return (
+    <p
+      style={{
+        margin: "6px 0 0",
+        fontSize: 11,
+        color: mine ? "rgba(255,255,255,0.65)" : "#565f89",
+      }}
+    >
+      {attachment.name} • {formatFileSize(attachment.size)}
+    </p>
+  );
+}
+
 function AttachmentComposerPreview({ attachment, onRemove }) {
   const isImage = attachment.kind === "image";
+  const isVideo = attachment.kind === "video";
+  const isAudio = attachment.kind === "audio";
 
   return (
     <div
@@ -980,8 +1075,22 @@ function AttachmentComposerPreview({ attachment, onRemove }) {
               objectFit: "cover",
             }}
           />
+        ) : isVideo && attachment.dataUrl ? (
+          <video
+            src={attachment.dataUrl}
+            muted
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
         ) : isImage ? (
           <ImageIcon size={20} color="#a78bfa" />
+        ) : isVideo ? (
+          <Video size={20} color="#a78bfa" />
+        ) : isAudio ? (
+          <Mic size={20} color="#a78bfa" />
         ) : (
           <FileText size={20} color="#a78bfa" />
         )}

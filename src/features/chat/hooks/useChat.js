@@ -52,7 +52,9 @@ export function useChat(conversationId) {
         content,
         options.type || "TEXT",
       );
-      setMessages(prev => [...prev, newMessage]);
+      setMessages((currentMessages) =>
+        upsertMessages(currentMessages, [newMessage]),
+      );
       return newMessage;
     } catch (err) {
       setError(err.message);
@@ -123,6 +125,26 @@ function areMessagesEqual(currentMessages, nextMessages) {
 
     return message.id === nextMessage.id
       && message.content === nextMessage.content
-      && message.status === nextMessage.status;
+      && message.status === nextMessage.status
+      && message.senderAvatarPhoto === nextMessage.senderAvatarPhoto;
+  });
+}
+
+function upsertMessages(currentMessages, nextMessages) {
+  const messagesById = new Map();
+
+  [...currentMessages, ...nextMessages].forEach((message) => {
+    messagesById.set(message.id, message);
+  });
+
+  return [...messagesById.values()].sort((a, b) => {
+    const aTimestamp = Date.parse(a.createdAt || "");
+    const bTimestamp = Date.parse(b.createdAt || "");
+
+    if (Number.isNaN(aTimestamp) || Number.isNaN(bTimestamp)) {
+      return 0;
+    }
+
+    return aTimestamp - bTimestamp;
   });
 }

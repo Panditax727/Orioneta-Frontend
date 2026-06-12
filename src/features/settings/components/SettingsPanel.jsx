@@ -5,7 +5,9 @@ import {
   ImagePlus,
   LogOut,
   MessageCircle,
+  MonitorUp,
   Palette,
+  Phone,
   Puzzle,
   Save,
   Settings,
@@ -13,6 +15,7 @@ import {
   SlidersHorizontal,
   Trash2,
   UserRound,
+  Video,
 } from "lucide-react";
 import { useCustomization } from "../../customization/hooks/useCustomization";
 import {
@@ -41,6 +44,7 @@ const SETTING_SECTIONS = [
   { id: "account", label: "Cuenta", icon: Settings },
   { id: "privacy", label: "Privacidad", icon: Shield },
   { id: "appearance", label: "Personalizacion", icon: Palette },
+  { id: "media", label: "Voz y multimedia", icon: Video },
   { id: "session", label: "Sesion", icon: LogOut },
 ];
 
@@ -310,6 +314,13 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
               saving={savingAppearance}
               onUpdate={updateAppearance}
               onUpdateConversation={updateConversationAppearance}
+            />
+          )}
+
+          {activeSection === "media" && (
+            <MediaSection
+              userCustomization={userCustomization}
+              onUpdate={updateAppearance}
             />
           )}
 
@@ -634,6 +645,123 @@ function AppearanceSection({
         </div>
       )}
     </section>
+  );
+}
+
+function MediaSection({ userCustomization, onUpdate }) {
+  const secureContext =
+    typeof window !== "undefined" &&
+    (window.isSecureContext || window.location.hostname === "localhost");
+  const enabledMods = userCustomization?.enabledMods || [];
+  const callStudioEnabled = enabledMods.includes("call-studio");
+  const nextMods = callStudioEnabled
+    ? enabledMods.filter((modId) => modId !== "call-studio")
+    : [...enabledMods, "call-studio"];
+
+  return (
+    <section>
+      <SectionHeader
+        title="Voz y multimedia"
+        subtitle="Controla adjuntos, llamadas y pantalla compartida."
+      />
+
+      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+        <CapabilityCard
+          icon={<Phone size={16} />}
+          title="Llamadas"
+          text={
+            secureContext
+              ? "El navegador permite usar microfono en este origen."
+              : "Necesitas HTTPS para que el navegador habilite microfono."
+          }
+          ready={secureContext}
+        />
+        <CapabilityCard
+          icon={<Video size={16} />}
+          title="Videollamadas"
+          text={
+            secureContext
+              ? "Camara disponible para sesiones de video."
+              : "Camara bloqueada hasta publicar la app con HTTPS."
+          }
+          ready={secureContext}
+        />
+        <CapabilityCard
+          icon={<MonitorUp size={16} />}
+          title="Compartir pantalla"
+          text={
+            secureContext
+              ? "Pantalla compartida disponible si el navegador da permiso."
+              : "Pantalla compartida requiere HTTPS en produccion."
+          }
+          ready={secureContext}
+        />
+      </div>
+
+      <SettingRow label="Controles avanzados de llamada">
+        <Toggle
+          checked={callStudioEnabled}
+          onChange={() =>
+            onUpdate({ enabledMods: nextMods }, "Llamadas actualizadas")
+          }
+        />
+      </SettingRow>
+
+      <div style={{ marginTop: 16 }}>
+        <SectionTitle icon={<MessageCircle size={15} />} title="Adjuntos" />
+        <div style={{ padding: 14, background: "#10111a", border: "1px solid #1e2030", borderRadius: 8 }}>
+          <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 800, margin: "0 0 6px" }}>
+            Archivos compatibles
+          </p>
+          <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: 0 }}>
+            Imagenes, videos, audios y documentos livianos hasta 12 MB. Para
+            archivos grandes, el siguiente paso natural es mover adjuntos a
+            almacenamiento externo como MinIO/S3 y guardar solo la URL en el
+            mensaje.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CapabilityCard({ icon, title, text, ready }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: 12,
+        borderRadius: 8,
+        background: ready ? "rgba(34, 197, 94, 0.08)" : "#10111a",
+        border: `1px solid ${ready ? "rgba(34, 197, 94, 0.22)" : "#1e2030"}`,
+      }}
+    >
+      <div
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: 8,
+          background: ready ? "rgba(34, 197, 94, 0.16)" : "#1a1b26",
+          color: ready ? "#22c55e" : "#a78bfa",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ color: "#c0caf5", fontSize: 13, fontWeight: 800, margin: 0 }}>
+          {title}
+        </p>
+        <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: "3px 0 0" }}>
+          {text}
+        </p>
+      </div>
+    </div>
   );
 }
 
