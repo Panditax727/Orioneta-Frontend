@@ -158,7 +158,7 @@ cp .env.example .env
 Para trabajar contra el servidor actual:
 
 ```env
-VITE_API_BASE_URL=http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com
+VITE_API_BASE_URL=http://orioneta.duckdns.org
 ```
 
 Si cambias de EC2 o usas un balanceador, reemplaza el valor por la URL publica
@@ -209,7 +209,7 @@ inyectan al construir la imagen:
 
 ```bash
 docker build \
-  --build-arg VITE_API_BASE_URL=http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com \
+  --build-arg VITE_API_BASE_URL= \
   -t orioneta-frontend:latest .
 ```
 
@@ -223,6 +223,47 @@ Healthcheck:
 
 ```text
 http://localhost:5173/health
+```
+
+### HTTPS en `orioneta.duckdns.org`
+
+Para que llamadas, cámara y compartir pantalla funcionen en navegadores reales,
+la app debe correr bajo HTTPS. La opción recomendada es terminar TLS en la EC2
+con Caddy y dejar el contenedor del frontend como servicio interno.
+
+Requisitos:
+
+```text
+DuckDNS: orioneta.duckdns.org -> 3.208.164.144
+AWS Security Group: abrir 80/tcp y 443/tcp
+Frontend Docker: escuchar solo en 127.0.0.1:3000
+Caddy: publicar https://orioneta.duckdns.org
+```
+
+Instalación base en Amazon Linux:
+
+```bash
+sudo dnf install -y 'dnf-command(copr)'
+sudo dnf copr enable -y @caddy/caddy
+sudo dnf install -y caddy
+```
+
+Archivo recomendado:
+
+```bash
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy
+sudo systemctl reload caddy
+```
+
+El workflow `Build and deploy frontend` deja el contenedor en
+`127.0.0.1:3000`, por eso Caddy puede tomar los puertos publicos `80` y `443`
+sin chocar con Docker. Cuando HTTPS esté activo, el frontend usará rutas
+same-origin:
+
+```text
+https://orioneta.duckdns.org/api
+wss://orioneta.duckdns.org/ws/chat
 ```
 
 ---

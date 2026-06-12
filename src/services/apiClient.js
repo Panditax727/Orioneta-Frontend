@@ -1,9 +1,9 @@
 import { getSession } from "../features/auth/session";
 
-export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://orioneta-alb-956388445.us-east-1.elb.amazonaws.com"
-).replace(/\/$/, "");
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(
+  /\/$/,
+  "",
+);
 
 export class ApiError extends Error {
   constructor(message, status, details = null) {

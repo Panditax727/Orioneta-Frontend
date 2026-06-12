@@ -3,10 +3,14 @@ import { API_BASE_URL } from "../../../services/apiClient";
 export const REALTIME_INCOMING_EVENT = "orioneta.realtime.incoming";
 export const REALTIME_OUTGOING_EVENT = "orioneta.realtime.outgoing";
 
-const REALTIME_BASE_URL = import.meta.env.VITE_REALTIME_BASE_URL || API_BASE_URL;
+const REALTIME_BASE_URL =
+  import.meta.env.VITE_REALTIME_BASE_URL || API_BASE_URL || "";
 
 export function resolveRealtimeUrl(userId) {
-  const url = new URL(REALTIME_BASE_URL);
+  const url = new URL(
+    REALTIME_BASE_URL || window.location.origin,
+    window.location.origin,
+  );
 
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/ws/chat";
