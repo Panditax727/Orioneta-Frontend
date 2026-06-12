@@ -583,7 +583,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
             </span>
           </div>
         ) : (
-          visibleMessages.map((msg) => (
+          visibleMessages.map((msg, index) => (
             <MessageBubble
               key={msg.id}
               msg={msg}
@@ -591,6 +591,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               bubbleStyle={bubbleStyle}
               compactMode={compactMode}
               fontSize={messageFontSize}
+              pushToBottom={index === 0}
             />
           ))
         )}
@@ -747,7 +748,14 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   );
 }
 
-function MessageBubble({ msg, visuals, bubbleStyle, compactMode, fontSize }) {
+function MessageBubble({
+  msg,
+  visuals,
+  bubbleStyle,
+  compactMode,
+  fontSize,
+  pushToBottom = false,
+}) {
   const radius = getBubbleRadius(bubbleStyle, msg.mine);
   const padding = getBubblePadding(bubbleStyle, compactMode);
   const parsed = parseMessageContent(msg.content);
@@ -763,6 +771,7 @@ function MessageBubble({ msg, visuals, bubbleStyle, compactMode, fontSize }) {
         flexDirection: msg.mine ? "row-reverse" : "row",
         alignItems: "flex-end",
         gap: compactMode ? 6 : 8,
+        marginTop: pushToBottom ? "auto" : 0,
         marginBottom: compactMode ? 2 : 4,
       }}
     >

@@ -87,6 +87,7 @@ const SEED_MESSAGES = {
 };
 
 const userCache = new Map();
+const conversationAliases = new Map();
 
 function delay(ms = 120) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -302,11 +303,18 @@ function getMessageSummary(content, type = "TEXT") {
   return content || "Mensaje";
 }
 
+function getTimestamp(value) {
+  const timestamp = Date.parse(value || "");
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
 function sortByLastActivity(conversations) {
   return [...conversations].sort((a, b) => {
-    if (!a.time && b.time) return 1;
-    if (a.time && !b.time) return -1;
-    return 0;
+    const bTimestamp = getTimestamp(b.lastActivityAt || b.updatedAt || b.createdAt);
+    const aTimestamp = getTimestamp(a.lastActivityAt || a.updatedAt || a.createdAt);
+
+    return bTimestamp - aTimestamp;
   });
 }
 
@@ -398,6 +406,75 @@ async function fetchUserConversations(userId) {
   return apiRequest(`/api/conversations/users/${userId}`);
 }
 
+function getRelatedConversationIds(conversationId) {
+  const key = String(conversationId);
+  const aliases = conversationAliases.get(key);
+
+  return aliases?.length ? aliases : [conversationId];
+}
+
+function getCanonicalConversationId(conversationId) {
+  return getRelatedConversationIds(conversationId)[0] || conversationId;
+}
+
+async function fetchRelatedConversationMessages(conversationId) {
+  const conversationIds = getRelatedConversationIds(conversationId);
+  const results = await Promise.allSettled(
+    conversationIds.map((id) => fetchConversationMessages(id)),
+  );
+  const fulfilledResults = results.filter(
+    (result) => result.status === "fulfilled",
+  );
+
+  if (fulfilledResults.length > 0) {
+    return fulfilledResults.flatMap((result) => result.value || []);
+  }
+
+  throw results.find((result) => result.status === "rejected")?.reason ||
+    new ApiError("No se pudieron cargar los mensajes", 0);
+}
+
+function uniqueRawMessages(messages) {
+  const uniqueMessages = new Map();
+
+  (messages || []).forEach((message) => {
+    const key =
+      message.id ||
+      [
+        message.conversationId,
+        message.senderId,
+        message.createdAt,
+        message.content,
+      ].join(":");
+
+    if (!uniqueMessages.has(key)) {
+      uniqueMessages.set(key, message);
+    }
+  });
+
+  return [...uniqueMessages.values()];
+}
+
+function sortRawMessages(messages) {
+  return uniqueRawMessages(messages).sort((a, b) => {
+    const aTimestamp = getTimestamp(a.createdAt || a.updatedAt);
+    const bTimestamp = getTimestamp(b.createdAt || b.updatedAt);
+
+    return aTimestamp - bTimestamp;
+  });
+}
+
+function getConversationActivityAt(conversation, messages = []) {
+  const lastMessage = sortRawMessages(messages).at(-1);
+
+  return (
+    lastMessage?.createdAt ||
+    conversation.updatedAt ||
+    conversation.createdAt ||
+    null
+  );
+}
+
 async function normalizeBackendMessage(message, currentUserId) {
   const mine = String(message.senderId) === String(currentUserId);
   const sender = mine ? null : await findUserCached(message.senderId);
@@ -418,7 +495,7 @@ async function normalizeBackendMessage(message, currentUserId) {
 
 async function normalizeBackendMessages(messages, currentUserId) {
   return Promise.all(
-    (messages || []).map((message) =>
+    sortRawMessages(messages || []).map((message) =>
       normalizeBackendMessage(message, currentUserId),
     ),
   );
@@ -437,8 +514,9 @@ async function normalizeBackendConversation(
 
   const otherParticipantId = getOtherParticipantId(conversation, currentUserId);
   const otherParticipant = await findUserCached(otherParticipantId);
-  const rawMessages = messages || [];
+  const rawMessages = sortRawMessages(messages || []);
   const lastMessage = rawMessages.at(-1);
+  const lastActivityAt = getConversationActivityAt(conversation, rawMessages);
   const fallbackName =
     conversation.type === "PRIVATE_CHAT" ? "Chat privado" : "Grupo";
   const name =
@@ -459,9 +537,14 @@ async function normalizeBackendConversation(
       ? getMessageSummary(lastMessage.content, lastMessage.type)
       : "Aun no hay mensajes",
     time: formatMessageTime(lastMessage?.createdAt || conversation.updatedAt),
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+    lastActivityAt,
     unread: 0,
     online: status === "ONLINE",
+    rawMessages,
     participants: conversation.participants || [],
+    duplicateConversationIds: [conversation.id],
     backend: true,
   };
 }
@@ -475,7 +558,7 @@ async function getBackendConversations(currentProfile) {
 
   const conversations = await getConversationListWithFallback(currentUserId);
 
-  return Promise.all(
+  const normalizedConversations = await Promise.all(
     conversations.map(async (conversation) => {
       const messages = await fetchConversationMessages(conversation.id).catch(
         () => [],
@@ -487,6 +570,119 @@ async function getBackendConversations(currentProfile) {
       );
     }),
   );
+
+  return mergeDuplicatePrivateConversations(
+    normalizedConversations,
+    currentUserId,
+  );
+}
+
+function getConversationGroupKey(conversation, currentUserId) {
+  if (conversation.type !== "PRIVATE_CHAT") {
+    return `conversation:${conversation.id}`;
+  }
+
+  if (conversation.friendId) {
+    return `private:${conversation.friendId}`;
+  }
+
+  const otherParticipantIds = getParticipantIds(conversation)
+    .filter((participantId) => String(participantId) !== String(currentUserId))
+    .sort();
+
+  return `private:${otherParticipantIds.join(":") || conversation.id}`;
+}
+
+function pickCanonicalConversation(firstConversation, secondConversation) {
+  if (!firstConversation) {
+    return secondConversation;
+  }
+
+  const firstCreatedAt = getTimestamp(firstConversation.createdAt);
+  const secondCreatedAt = getTimestamp(secondConversation.createdAt);
+
+  if (!firstCreatedAt && secondCreatedAt) {
+    return secondConversation;
+  }
+
+  if (firstCreatedAt && secondCreatedAt && secondCreatedAt < firstCreatedAt) {
+    return secondConversation;
+  }
+
+  return firstConversation;
+}
+
+function mergeConversationGroup(currentConversation, nextConversation) {
+  const canonicalConversation = pickCanonicalConversation(
+    currentConversation,
+    nextConversation,
+  );
+  const duplicateIds = new Set([
+    ...(currentConversation?.duplicateConversationIds || []),
+    ...(nextConversation?.duplicateConversationIds || [nextConversation.id]),
+  ]);
+  const rawMessages = sortRawMessages([
+    ...(currentConversation?.rawMessages || []),
+    ...(nextConversation.rawMessages || []),
+  ]);
+  const lastMessage = rawMessages.at(-1);
+  const mostRecentConversation =
+    getTimestamp(nextConversation.lastActivityAt) >
+    getTimestamp(currentConversation?.lastActivityAt)
+      ? nextConversation
+      : currentConversation;
+  const lastActivityAt =
+    lastMessage?.createdAt ||
+    mostRecentConversation?.lastActivityAt ||
+    canonicalConversation.lastActivityAt;
+  const orderedDuplicateIds = [
+    canonicalConversation.id,
+    ...[...duplicateIds].filter(
+      (conversationId) => conversationId !== canonicalConversation.id,
+    ),
+  ];
+
+  return {
+    ...canonicalConversation,
+    lastMessage: lastMessage
+      ? getMessageSummary(lastMessage.content, lastMessage.type)
+      : mostRecentConversation?.lastMessage || canonicalConversation.lastMessage,
+    time: formatMessageTime(lastActivityAt),
+    updatedAt: mostRecentConversation?.updatedAt || canonicalConversation.updatedAt,
+    lastActivityAt,
+    rawMessages,
+    duplicateConversationIds: orderedDuplicateIds,
+  };
+}
+
+function mergeDuplicatePrivateConversations(conversations, currentUserId) {
+  conversationAliases.clear();
+
+  const groupedConversations = new Map();
+
+  conversations.forEach((conversation) => {
+    const groupKey = getConversationGroupKey(conversation, currentUserId);
+    const currentConversation = groupedConversations.get(groupKey);
+
+    groupedConversations.set(
+      groupKey,
+      mergeConversationGroup(currentConversation, conversation),
+    );
+  });
+
+  const mergedConversations = sortByLastActivity([
+    ...groupedConversations.values(),
+  ]);
+
+  mergedConversations.forEach((conversation) => {
+    const aliases = conversation.duplicateConversationIds || [conversation.id];
+
+    aliases.forEach((alias) => {
+      conversationAliases.set(String(alias), aliases);
+    });
+  });
+
+  return mergedConversations;
 }
 
 async function getConversationListWithFallback(currentUserId) {
@@ -687,7 +883,7 @@ export const chatService = {
     }
 
     try {
-      const messages = await fetchConversationMessages(conversationId);
+      const messages = await fetchRelatedConversationMessages(conversationId);
       return normalizeBackendMessages(messages || [], currentUserId);
     } catch (error) {
       if (!shouldUseBffFallback(error)) {
@@ -827,8 +1023,9 @@ export const chatService = {
       throw new ApiError("No se pudo identificar al usuario actual", 0);
     }
 
+    const targetConversationId = getCanonicalConversationId(conversationId);
     const sentMessage = await sendMessageWithFallback({
-      conversationId,
+      conversationId: targetConversationId,
       senderId: currentUserId,
       content,
       type,
@@ -843,7 +1040,7 @@ export const chatService = {
 
     publishRealtimeEvent({
       type: "MESSAGE_SENT",
-      conversationId,
+      conversationId: targetConversationId,
       messageId: normalizedMessage.id,
       senderId: currentUserId,
       content: normalizedMessage.content,
@@ -911,5 +1108,11 @@ export const chatService = {
   subscribe: (callback) => {
     window.addEventListener(CHAT_UPDATED_EVENT, callback);
     return () => window.removeEventListener(CHAT_UPDATED_EVENT, callback);
+  },
+
+  isConversationAlias: (conversationId, candidateConversationId) => {
+    return getRelatedConversationIds(conversationId)
+      .map(String)
+      .includes(String(candidateConversationId));
   },
 };

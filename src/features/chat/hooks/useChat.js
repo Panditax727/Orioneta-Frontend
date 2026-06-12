@@ -110,7 +110,7 @@ function isMessageEventForConversation(event, conversationId) {
   }
 
   return event.type === "MESSAGE_SENT"
-    && String(event.conversationId) === String(conversationId);
+    && chatService.isConversationAlias(conversationId, event.conversationId);
 }
 
 function areMessagesEqual(currentMessages, nextMessages) {
