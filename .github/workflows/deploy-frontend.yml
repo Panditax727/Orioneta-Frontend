@@ -55,10 +55,12 @@ jobs:
 
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             docker pull "$IMAGE"
+            docker network create orioneta-public || true
+            docker network connect orioneta-public orioneta-caddy || true
             docker rm -f "${{ env.CONTAINER_NAME }}" || true
             docker run -d \
               --name "${{ env.CONTAINER_NAME }}" \
               --restart unless-stopped \
-              -p 127.0.0.1:3000:80 \
+              --network orioneta-public \
               "$IMAGE"
             docker image prune -f

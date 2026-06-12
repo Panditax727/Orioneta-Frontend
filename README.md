@@ -228,38 +228,70 @@ http://localhost:5173/health
 ### HTTPS en `orioneta.duckdns.org`
 
 Para que llamadas, cámara y compartir pantalla funcionen en navegadores reales,
-la app debe correr bajo HTTPS. La opción recomendada es terminar TLS en la EC2
-con Caddy y dejar el contenedor del frontend como servicio interno.
+la app debe correr bajo HTTPS. En Amazon Linux 2023 la opción más práctica es
+usar Caddy como contenedor Docker y dejar el frontend en una red Docker interna.
 
 Requisitos:
 
 ```text
 DuckDNS: orioneta.duckdns.org -> 3.208.164.144
 AWS Security Group: abrir 80/tcp y 443/tcp
-Frontend Docker: escuchar solo en 127.0.0.1:3000
-Caddy: publicar https://orioneta.duckdns.org
+Caddy Docker: publicar 80/tcp y 443/tcp
+Frontend Docker: sin puertos publicos, conectado a orioneta-public
+Backend: accesible desde el frontend por 10.0.0.236:8080
 ```
 
-Instalación base en Amazon Linux:
+Red compartida:
 
 ```bash
-sudo dnf install -y 'dnf-command(copr)'
-sudo dnf copr enable -y @caddy/caddy
-sudo dnf install -y caddy
+docker network create orioneta-public || true
 ```
 
-Archivo recomendado:
+Frontend dentro de la red:
 
 ```bash
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo systemctl enable --now caddy
-sudo systemctl reload caddy
+docker pull oriontheprogrammer/orioneta-frontend:latest
+docker rm -f orioneta-frontend || true
+docker run -d \
+  --name orioneta-frontend \
+  --restart unless-stopped \
+  --network orioneta-public \
+  oriontheprogrammer/orioneta-frontend:latest
 ```
 
-El workflow `Build and deploy frontend` deja el contenedor en
-`127.0.0.1:3000`, por eso Caddy puede tomar los puertos publicos `80` y `443`
-sin chocar con Docker. Cuando HTTPS esté activo, el frontend usará rutas
-same-origin:
+Caddyfile recomendado:
+
+```caddyfile
+orioneta.duckdns.org {
+  encode zstd gzip
+
+  reverse_proxy orioneta-frontend:80
+}
+```
+
+Caddy como contenedor:
+
+```bash
+mkdir -p ~/orioneta-caddy
+cp deploy/Caddyfile ~/orioneta-caddy/Caddyfile
+
+docker rm -f orioneta-caddy || true
+docker run -d \
+  --name orioneta-caddy \
+  --restart unless-stopped \
+  --network orioneta-public \
+  -p 80:80 \
+  -p 443:443 \
+  -v ~/orioneta-caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+  -v caddy_data:/data \
+  -v caddy_config:/config \
+  caddy:2-alpine
+```
+
+El workflow `Build and deploy frontend` respeta esta topología: actualiza el
+contenedor `orioneta-frontend`, lo conecta a `orioneta-public` y no publica
+puertos directos. Caddy queda encargado de los certificados y del tráfico
+publico. Con HTTPS activo, el frontend usa rutas same-origin:
 
 ```text
 https://orioneta.duckdns.org/api
