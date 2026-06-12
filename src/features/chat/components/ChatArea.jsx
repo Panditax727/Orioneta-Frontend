@@ -19,12 +19,31 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { uploadMediaFile } from "../../../services/mediaService";
+import { ensureCurrentUserProfile } from "../../../services/userService";
 import { useCustomization } from "../../customization/hooks/useCustomization";
+import {
+  publishRealtimeEvent,
+  subscribeRealtimeEvents,
+} from "../../realtime/services/realtimeService";
 import ProfileBadges from "../../status/components/ProfileBadges";
 import { useChat } from "../hooks/useChat";
 
 const MAX_ATTACHMENT_SIZE = 12 * 1024 * 1024;
 const QUICK_EMOTES = ["✨", "💜", "🔥", "ok", "dale"];
+const CALL_SIGNAL_TYPES = new Set([
+  "CALL_OFFER",
+  "CALL_ANSWER",
+  "CALL_ICE_CANDIDATE",
+  "CALL_ENDED",
+  "CALL_DECLINED",
+]);
+const RTC_CONFIGURATION = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
+};
 
 const DEFAULT_VISUALS = {
   chatBackground: "#0d0e14",
@@ -41,9 +60,15 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [callSession, setCallSession] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const fileInputRef = useRef(null);
-  const callVideoRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteMediaRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
+  const callSessionRef = useRef(null);
 
   const { messages, loading, sending, error, sendMessage } = useChat(
     conversation?.id,
@@ -77,16 +102,52 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const callStudioEnabled = enabledMods.has("call-studio");
 
   useEffect(() => {
-    return () => {
-      stopMediaStream(callSession?.stream);
-    };
-  }, [callSession?.stream]);
+    callSessionRef.current = callSession;
+  }, [callSession]);
 
   useEffect(() => {
-    if (callVideoRef.current) {
-      callVideoRef.current.srcObject = callSession?.stream || null;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = callSession?.localStream || null;
     }
-  }, [callSession?.stream]);
+  }, [callSession?.localStream]);
+
+  useEffect(() => {
+    if (remoteMediaRef.current) {
+      remoteMediaRef.current.srcObject = callSession?.remoteStream || null;
+    }
+  }, [callSession?.remoteStream]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveCurrentUser() {
+      try {
+        const profile = await ensureCurrentUserProfile();
+
+        if (mounted) {
+          setCurrentUserId(getProfileId(profile));
+        }
+      } catch {
+        if (mounted) {
+          setCurrentUserId(null);
+        }
+      }
+    }
+
+    queueMicrotask(() => {
+      void resolveCurrentUser();
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [conversation?.id]);
+
+  useEffect(() => {
+    return () => {
+      revokeAttachmentPreview(pendingAttachment);
+    };
+  }, [pendingAttachment]);
 
   const visibleMessages = useMemo(() => {
     if (!messageSearch.trim()) {
@@ -99,6 +160,476 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       getSearchableMessageText(item).includes(normalizedSearch),
     );
   }, [messageSearch, messages]);
+
+  const handleAttachmentSelect = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      setNotice("El archivo no puede superar los 12 MB por ahora");
+      return;
+    }
+
+    try {
+      const attachment = await buildAttachmentPayload(file);
+      setPendingAttachment((current) => {
+        revokeAttachmentPreview(current);
+        return attachment;
+      });
+      setNotice("");
+    } catch (attachmentError) {
+      setNotice(attachmentError.message || "No se pudo preparar el archivo");
+    }
+  };
+
+  const handleSend = async () => {
+    if ((!message.trim() && !pendingAttachment) || sending) {
+      return;
+    }
+
+    try {
+      if (pendingAttachment) {
+        setNotice("Subiendo archivo...");
+        const ownerUserId = currentUserId || getProfileId(await ensureCurrentUserProfile());
+        const uploadedMedia = await uploadMediaFile({
+          ownerUserId,
+          file: pendingAttachment.file,
+          purpose: "MESSAGE_ATTACHMENT",
+        });
+        const uploadedAttachment = buildUploadedAttachment(
+          pendingAttachment,
+          uploadedMedia,
+        );
+        const payload = JSON.stringify({
+          text: message.trim(),
+          attachment: uploadedAttachment,
+        });
+
+        await sendMessage(payload, { type: uploadedAttachment.messageType });
+        revokeAttachmentPreview(pendingAttachment);
+        setPendingAttachment(null);
+      } else {
+        await sendMessage(message.trim());
+      }
+
+      setMessage("");
+      setNotice("");
+    } catch (err) {
+      console.error("Error al enviar mensaje:", err);
+      setNotice(
+        err.status === 502
+          ? "El servicio de archivos aun no esta disponible en el servidor"
+          : "No se pudo enviar el mensaje",
+      );
+    }
+  };
+
+  const publishCallSignal = async (type, payload = {}) => {
+    if (!conversation?.id) {
+      return;
+    }
+
+    const profile = await ensureCurrentUserProfile();
+    const senderId = getProfileId(profile);
+
+    publishRealtimeEvent({
+      type,
+      conversationId,
+      senderId,
+      messageType: "CALL_SIGNAL",
+      content: JSON.stringify(payload),
+    });
+  };
+
+  const createPeerConnection = (callId) => {
+    const peerConnection = new RTCPeerConnection(RTC_CONFIGURATION);
+
+    peerConnection.onicecandidate = (event) => {
+      if (!event.candidate) {
+        return;
+      }
+
+      void publishCallSignal("CALL_ICE_CANDIDATE", {
+        callId,
+        candidate: event.candidate.toJSON(),
+      });
+    };
+
+    peerConnection.ontrack = (event) => {
+      const [remoteStream] = event.streams;
+
+      if (!remoteStream) {
+        return;
+      }
+
+      setCallSession((current) =>
+        current?.callId === callId
+          ? {
+              ...current,
+              status: "connected",
+              remoteStream,
+              startedAt: current.startedAt || new Date(),
+            }
+          : current,
+      );
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (["failed", "closed", "disconnected"].includes(peerConnection.connectionState)) {
+        setCallSession((current) =>
+          current?.callId === callId
+            ? { ...current, status: "reconnecting" }
+            : current,
+        );
+      }
+
+      if (peerConnection.connectionState === "connected") {
+        setCallSession((current) =>
+          current?.callId === callId
+            ? { ...current, status: "connected" }
+            : current,
+        );
+      }
+    };
+
+    peerConnectionRef.current = peerConnection;
+
+    return peerConnection;
+  };
+
+  const startCall = async (mode) => {
+    try {
+      closeCallResources();
+      setNotice("");
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setNotice("Tu navegador no permite iniciar llamadas desde aqui");
+        return;
+      }
+
+      if (!window.isSecureContext && window.location.hostname !== "localhost") {
+        setNotice("Las llamadas y pantalla necesitan HTTPS en el navegador");
+        return;
+      }
+
+      if (mode === "screen" && !navigator.mediaDevices?.getDisplayMedia) {
+        setNotice("Tu navegador no permite compartir pantalla");
+        return;
+      }
+
+      if (!conversation?.backend) {
+        setNotice("Las llamadas funcionan en conversaciones sincronizadas");
+        return;
+      }
+
+      const stream = await requestCallStream(mode);
+      const callId = createCallId();
+      const peerConnection = createPeerConnection(callId);
+
+      if (mode === "screen") {
+        stream.getVideoTracks().forEach((track) => {
+          track.addEventListener("ended", () => {
+            setCallSession((current) =>
+              current?.localStream === stream ? null : current,
+            );
+          });
+        });
+      }
+
+      localStreamRef.current = stream;
+      stream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      setCallSession({
+        callId,
+        mode,
+        status: "calling",
+        direction: "outgoing",
+        localStream: stream,
+        remoteStream: null,
+        muted: false,
+        cameraOff: false,
+        startedAt: new Date(),
+        participantName: conversation.name,
+      });
+
+      await publishCallSignal("CALL_OFFER", {
+        callId,
+        mode,
+        offer,
+      });
+    } catch (callError) {
+      const label =
+        mode === "screen" ? "compartir pantalla" : "iniciar la llamada";
+
+      setNotice(
+        callError?.name === "NotAllowedError"
+          ? "Permiso rechazado por el navegador"
+          : `No se pudo ${label}`,
+      );
+    }
+  };
+
+  const acceptCall = async () => {
+    const incomingCall = callSessionRef.current;
+
+    if (!incomingCall?.offer) {
+      return;
+    }
+
+    try {
+      setNotice("");
+      const stream = await requestCallStream(
+        incomingCall.mode === "screen" ? "audio" : incomingCall.mode,
+      );
+      const peerConnection = createPeerConnection(incomingCall.callId);
+
+      localStreamRef.current = stream;
+      stream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(incomingCall.offer),
+      );
+      await flushPendingIceCandidates(peerConnection, incomingCall.callId);
+
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      setCallSession((current) =>
+        current?.callId === incomingCall.callId
+          ? {
+              ...current,
+              status: "connected",
+              direction: "incoming",
+              localStream: stream,
+              startedAt: new Date(),
+            }
+          : current,
+      );
+
+      await publishCallSignal("CALL_ANSWER", {
+        callId: incomingCall.callId,
+        answer,
+      });
+    } catch (callError) {
+      setNotice(
+        callError?.name === "NotAllowedError"
+          ? "Permiso rechazado por el navegador"
+          : "No se pudo aceptar la llamada",
+      );
+    }
+  };
+
+  const declineCall = async () => {
+    const activeCall = callSessionRef.current;
+
+    if (activeCall?.callId) {
+      await publishCallSignal("CALL_DECLINED", {
+        callId: activeCall.callId,
+      });
+    }
+
+    closeCallResources();
+    setCallSession(null);
+  };
+
+  const endCall = async () => {
+    const activeCall = callSessionRef.current;
+
+    if (activeCall?.callId) {
+      await publishCallSignal("CALL_ENDED", {
+        callId: activeCall.callId,
+      });
+    }
+
+    closeCallResources();
+    setCallSession(null);
+  };
+
+  const toggleAudio = () => {
+    const stream = callSession?.localStream;
+
+    if (!stream) {
+      return;
+    }
+
+    const muted = !callSession.muted;
+
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !muted;
+    });
+
+    setCallSession((current) => (current ? { ...current, muted } : current));
+  };
+
+  const toggleCamera = () => {
+    const stream = callSession?.localStream;
+
+    if (!stream) {
+      return;
+    }
+
+    const cameraOff = !callSession.cameraOff;
+
+    stream.getVideoTracks().forEach((track) => {
+      track.enabled = !cameraOff;
+    });
+
+    setCallSession((current) =>
+      current ? { ...current, cameraOff } : current,
+    );
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
+    }
+  };
+
+  async function handleCallSignal(event) {
+    const payload = parseCallPayload(event.content);
+
+    if (!payload?.callId) {
+      return;
+    }
+
+    if (event.type === "CALL_OFFER") {
+      if (callSessionRef.current && callSessionRef.current.callId !== payload.callId) {
+        await publishCallSignal("CALL_DECLINED", {
+          callId: payload.callId,
+          reason: "busy",
+        });
+        return;
+      }
+
+      setCallSession({
+        callId: payload.callId,
+        mode: payload.mode || "audio",
+        status: "ringing",
+        direction: "incoming",
+        offer: payload.offer,
+        localStream: null,
+        remoteStream: null,
+        muted: false,
+        cameraOff: false,
+        startedAt: null,
+        participantName: conversation.name,
+      });
+      return;
+    }
+
+    if (event.type === "CALL_ANSWER") {
+      const peerConnection = peerConnectionRef.current;
+
+      if (callSessionRef.current?.callId !== payload.callId || !peerConnection) {
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(payload.answer),
+      );
+      await flushPendingIceCandidates(peerConnection, payload.callId);
+      setCallSession((current) =>
+        current?.callId === payload.callId
+          ? { ...current, status: "connected" }
+          : current,
+      );
+      return;
+    }
+
+    if (event.type === "CALL_ICE_CANDIDATE") {
+      await addRemoteIceCandidate(payload);
+      return;
+    }
+
+    if (event.type === "CALL_DECLINED" || event.type === "CALL_ENDED") {
+      if (callSessionRef.current?.callId === payload.callId) {
+        closeCallResources();
+        setCallSession(null);
+        setNotice(
+          event.type === "CALL_DECLINED"
+            ? "La llamada fue rechazada"
+            : "La llamada finalizo",
+        );
+      }
+    }
+  }
+
+  async function addRemoteIceCandidate({ callId, candidate }) {
+    if (!candidate) {
+      return;
+    }
+
+    const peerConnection = peerConnectionRef.current;
+
+    if (callSessionRef.current?.callId !== callId || !peerConnection) {
+      pendingIceCandidatesRef.current.push({ callId, candidate });
+      return;
+    }
+
+    if (!peerConnection.remoteDescription) {
+      pendingIceCandidatesRef.current.push({ callId, candidate });
+      return;
+    }
+
+    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+
+  async function flushPendingIceCandidates(peerConnection, callId) {
+    const pendingCandidates = pendingIceCandidatesRef.current;
+
+    pendingIceCandidatesRef.current = pendingCandidates.filter(
+      (candidate) => candidate.callId !== callId,
+    );
+
+    for (const pendingCandidate of pendingCandidates) {
+      if (pendingCandidate.callId === callId) {
+        await peerConnection.addIceCandidate(
+          new RTCIceCandidate(pendingCandidate.candidate),
+        );
+      }
+    }
+  }
+
+  function closeCallResources() {
+    stopMediaStream(localStreamRef.current);
+    localStreamRef.current = null;
+
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    pendingIceCandidatesRef.current = [];
+  }
+
+  useEffect(() => () => {
+    closeCallResources();
+  }, []);
+
+  useEffect(() => {
+    if (!conversationId || !currentUserId) {
+      return undefined;
+    }
+
+    return subscribeRealtimeEvents((event) => {
+      if (!isCallSignalForConversation(event, conversationId, currentUserId)) {
+        return;
+      }
+
+      void handleCallSignal(event);
+    });
+    // El handler lee refs para usar el estado vivo de la llamada sin reabrir el socket en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, currentUserId]);
 
   if (!conversation) {
     return (
@@ -139,188 +670,6 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       </div>
     );
   }
-
-  const handleAttachmentSelect = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
-    if (file.size > MAX_ATTACHMENT_SIZE) {
-      setNotice("El archivo no puede superar los 12 MB por ahora");
-      return;
-    }
-
-    try {
-      const attachment = await buildAttachmentPayload(file);
-      setPendingAttachment(attachment);
-      setNotice("");
-    } catch (attachmentError) {
-      setNotice(attachmentError.message || "No se pudo preparar el archivo");
-    }
-  };
-
-  const handleSend = async () => {
-    if ((!message.trim() && !pendingAttachment) || sending) {
-      return;
-    }
-
-    try {
-      if (pendingAttachment) {
-        const payload = JSON.stringify({
-          text: message.trim(),
-          attachment: pendingAttachment,
-        });
-
-        await sendMessage(payload, { type: pendingAttachment.messageType });
-        setPendingAttachment(null);
-      } else {
-        await sendMessage(message.trim());
-      }
-
-      setMessage("");
-      setNotice("");
-    } catch (err) {
-      console.error("Error al enviar mensaje:", err);
-      setNotice("No se pudo enviar el mensaje");
-    }
-  };
-
-  const startCall = async (mode) => {
-    try {
-      stopMediaStream(callSession?.stream);
-      setNotice("");
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setNotice("Tu navegador no permite iniciar llamadas desde aqui");
-        return;
-      }
-
-      if (!window.isSecureContext && window.location.hostname !== "localhost") {
-        setNotice("Las llamadas y pantalla necesitan HTTPS en el navegador");
-        return;
-      }
-
-      if (mode === "screen" && !navigator.mediaDevices?.getDisplayMedia) {
-        setNotice("Tu navegador no permite compartir pantalla");
-        return;
-      }
-
-      const stream =
-        mode === "screen"
-          ? await navigator.mediaDevices.getDisplayMedia({
-              video: true,
-              audio: false,
-            })
-          : await navigator.mediaDevices.getUserMedia({
-              audio: true,
-              video: mode === "video",
-            });
-
-      if (mode === "screen") {
-        stream.getVideoTracks().forEach((track) => {
-          track.addEventListener("ended", () => {
-            setCallSession((current) =>
-              current?.stream === stream ? null : current,
-            );
-          });
-        });
-      }
-
-      setCallSession({
-        mode,
-        stream,
-        muted: false,
-        cameraOff: false,
-        startedAt: new Date(),
-        participantName: conversation.name,
-      });
-    } catch (callError) {
-      const label =
-        mode === "screen" ? "compartir pantalla" : "iniciar la llamada";
-
-      setNotice(
-        callError?.name === "NotAllowedError"
-          ? "Permiso rechazado por el navegador"
-          : `No se pudo ${label}`,
-      );
-    }
-  };
-
-  const endCall = () => {
-    stopMediaStream(callSession?.stream);
-    setCallSession(null);
-  };
-
-  const toggleAudio = () => {
-    const stream = callSession?.stream;
-
-    if (!stream) {
-      return;
-    }
-
-    const muted = !callSession.muted;
-
-    stream.getAudioTracks().forEach((track) => {
-      track.enabled = !muted;
-    });
-
-    setCallSession((current) => (current ? { ...current, muted } : current));
-  };
-
-  const toggleCamera = () => {
-    const stream = callSession?.stream;
-
-    if (!stream) {
-      return;
-    }
-
-    const cameraOff = !callSession.cameraOff;
-
-    stream.getVideoTracks().forEach((track) => {
-      track.enabled = !cameraOff;
-    });
-
-    setCallSession((current) =>
-      current ? { ...current, cameraOff } : current,
-    );
-  };
-
-  const handleKeyDown = (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
-  };
-
-  const headerActions = [
-    {
-      icon: <Phone size={18} />,
-      key: "phone",
-      title: "Llamada",
-      onClick: () => startCall("audio"),
-    },
-    {
-      icon: <Video size={18} />,
-      key: "video",
-      title: "Video",
-      onClick: () => startCall("video"),
-    },
-    {
-      icon: <MonitorUp size={18} />,
-      key: "screen",
-      title: "Compartir pantalla",
-      onClick: () => startCall("screen"),
-    },
-    {
-      icon: <Search size={18} />,
-      key: "search",
-      title: "Buscar mensajes",
-      onClick: () => setSearchOpen((current) => !current),
-    },
-  ];
 
   return (
     <div
@@ -440,36 +789,24 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
-          {headerActions.map(({ icon, key, title, onClick }) => (
-            <button
-              key={key}
-              type="button"
-              title={title}
-              onClick={onClick}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#565f89",
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.background = "#1a1b26";
-                event.currentTarget.style.color = "#c0caf5";
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.background = "transparent";
-                event.currentTarget.style.color = "#565f89";
-              }}
-            >
-              {icon}
-            </button>
-          ))}
+          <HeaderActionButton title="Llamada" onClick={() => void startCall("audio")}>
+            <Phone size={18} />
+          </HeaderActionButton>
+          <HeaderActionButton title="Video" onClick={() => void startCall("video")}>
+            <Video size={18} />
+          </HeaderActionButton>
+          <HeaderActionButton
+            title="Compartir pantalla"
+            onClick={() => void startCall("screen")}
+          >
+            <MonitorUp size={18} />
+          </HeaderActionButton>
+          <HeaderActionButton
+            title="Buscar mensajes"
+            onClick={() => setSearchOpen((current) => !current)}
+          >
+            <Search size={18} />
+          </HeaderActionButton>
         </div>
       </div>
 
@@ -477,8 +814,11 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         <CallPanel
           conversationName={conversation.name}
           callSession={callSession}
-          videoRef={callVideoRef}
+          localVideoRef={localVideoRef}
+          remoteMediaRef={remoteMediaRef}
           studioEnabled={callStudioEnabled}
+          onAccept={acceptCall}
+          onDecline={declineCall}
           onToggleAudio={toggleAudio}
           onToggleCamera={toggleCamera}
           onSwitchMode={startCall}
@@ -894,12 +1234,13 @@ function MessageAttachment({ attachment, mine, visuals }) {
   const isAudio =
     attachment.kind === "audio" || attachment.messageType === "AUDIO";
   const iconColor = mine ? "white" : visuals.accent;
+  const sourceUrl = getAttachmentSourceUrl(attachment);
 
-  if (isImage && attachment.dataUrl) {
+  if (isImage && sourceUrl) {
     return (
       <div style={{ marginTop: 8 }}>
         <img
-          src={attachment.dataUrl}
+          src={sourceUrl}
           alt={attachment.name || "Imagen adjunta"}
           style={{
             maxWidth: 260,
@@ -925,12 +1266,12 @@ function MessageAttachment({ attachment, mine, visuals }) {
     );
   }
 
-  if (isVideo && attachment.dataUrl) {
+  if (isVideo && sourceUrl) {
     return (
       <div style={{ marginTop: 8 }}>
         <video
           controls
-          src={attachment.dataUrl}
+          src={sourceUrl}
           style={{
             maxWidth: 320,
             width: "100%",
@@ -949,7 +1290,7 @@ function MessageAttachment({ attachment, mine, visuals }) {
     );
   }
 
-  if (isAudio && attachment.dataUrl) {
+  if (isAudio && sourceUrl) {
     return (
       <div
         style={{
@@ -962,14 +1303,17 @@ function MessageAttachment({ attachment, mine, visuals }) {
             : "1px solid #1e2030",
         }}
       >
-        <audio controls src={attachment.dataUrl} style={{ width: 260 }} />
+        <audio controls src={sourceUrl} style={{ width: 260 }} />
         <AttachmentCaption attachment={attachment} mine={mine} />
       </div>
     );
   }
 
   return (
-    <div
+    <a
+      href={sourceUrl || undefined}
+      target={sourceUrl ? "_blank" : undefined}
+      rel={sourceUrl ? "noreferrer" : undefined}
       style={{
         marginTop: 8,
         display: "flex",
@@ -979,6 +1323,8 @@ function MessageAttachment({ attachment, mine, visuals }) {
         borderRadius: 12,
         background: mine ? "rgba(255,255,255,0.14)" : "#0d0e14",
         border: mine ? "1px solid rgba(255,255,255,0.16)" : "1px solid #1e2030",
+        textDecoration: "none",
+        cursor: sourceUrl ? "pointer" : "default",
       }}
     >
       {isVideo ? (
@@ -1015,7 +1361,7 @@ function MessageAttachment({ attachment, mine, visuals }) {
           {formatFileSize(attachment.size)}
         </p>
       </div>
-    </div>
+    </a>
   );
 }
 
@@ -1065,9 +1411,9 @@ function AttachmentComposerPreview({ attachment, onRemove }) {
           flexShrink: 0,
         }}
       >
-        {isImage && attachment.dataUrl ? (
+        {isImage && attachment.previewUrl ? (
           <img
-            src={attachment.dataUrl}
+            src={attachment.previewUrl}
             alt={attachment.name}
             style={{
               width: "100%",
@@ -1075,9 +1421,9 @@ function AttachmentComposerPreview({ attachment, onRemove }) {
               objectFit: "cover",
             }}
           />
-        ) : isVideo && attachment.dataUrl ? (
+        ) : isVideo && attachment.previewUrl ? (
           <video
-            src={attachment.dataUrl}
+            src={attachment.previewUrl}
             muted
             style={{
               width: "100%",
@@ -1201,8 +1547,11 @@ function QuickEmoteBar({ accent, onSelect }) {
 function CallPanel({
   conversationName,
   callSession,
-  videoRef,
+  localVideoRef,
+  remoteMediaRef,
   studioEnabled,
+  onAccept,
+  onDecline,
   onToggleAudio,
   onToggleCamera,
   onSwitchMode,
@@ -1211,6 +1560,10 @@ function CallPanel({
   const isVideoLike =
     callSession.mode === "video" || callSession.mode === "screen";
   const callTitle = getCallTitle(callSession.mode);
+  const isIncoming = callSession.status === "ringing";
+  const isConnecting =
+    callSession.status === "calling" || callSession.status === "reconnecting";
+  const hasRemoteStream = Boolean(callSession.remoteStream);
   const [elapsed, setElapsed] = useState(() =>
     getElapsedSeconds(callSession.startedAt),
   );
@@ -1251,9 +1604,12 @@ function CallPanel({
               background:
                 "linear-gradient(135deg, rgba(124,58,237,0.12), #05060a)",
             }}
-          >
-            <div
-              style={{
+            >
+              {hasRemoteStream && (
+                <audio ref={remoteMediaRef} autoPlay playsInline />
+              )}
+              <div
+                style={{
                 width: 58,
                 height: 58,
                 borderRadius: "50%",
@@ -1266,15 +1622,19 @@ function CallPanel({
             >
               <Phone size={24} />
             </div>
-            <div>
-              <p style={{ margin: 0, color: "#c0caf5", fontSize: 15, fontWeight: 800 }}>
-                Voz activa
-              </p>
-              <p style={{ margin: "3px 0 0", color: "#565f89", fontSize: 12 }}>
-                Microfono listo para hablar
-              </p>
+              <div>
+                <p style={{ margin: 0, color: "#c0caf5", fontSize: 15, fontWeight: 800 }}>
+                  {isIncoming ? "Llamada entrante" : "Voz activa"}
+                </p>
+                <p style={{ margin: "3px 0 0", color: "#565f89", fontSize: 12 }}>
+                  {isIncoming
+                    ? "Puedes aceptar o rechazar"
+                    : isConnecting
+                      ? "Conectando con la otra persona"
+                      : "Microfono listo para hablar"}
+                </p>
+              </div>
             </div>
-          </div>
         )}
 
         {isVideoLike && (
@@ -1286,20 +1646,53 @@ function CallPanel({
               overflow: "hidden",
             }}
           >
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                opacity: callSession.cameraOff ? 0.2 : 1,
-              }}
-            />
+            {hasRemoteStream ? (
+              <video
+                ref={remoteMediaRef}
+                autoPlay
+                playsInline
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: callSession.cameraOff || isIncoming ? 0.2 : 1,
+                }}
+              />
+            )}
 
-            {callSession.cameraOff && (
+            {hasRemoteStream && callSession.localStream && (
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  bottom: 12,
+                  width: 112,
+                  height: 72,
+                  objectFit: "cover",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  background: "#0d0e14",
+                }}
+              />
+            )}
+
+            {(callSession.cameraOff || isIncoming || isConnecting) && (
               <div
                 style={{
                   position: "absolute",
@@ -1311,9 +1704,13 @@ function CallPanel({
                   fontSize: 13,
                 }}
               >
-                {callSession.mode === "screen"
-                  ? "Pantalla pausada"
-                  : "Cámara desactivada"}
+                {isIncoming
+                  ? "Llamada entrante"
+                  : isConnecting
+                    ? "Conectando..."
+                    : callSession.mode === "screen"
+                      ? "Pantalla pausada"
+                      : "Cámara desactivada"}
               </div>
             )}
           </div>
@@ -1350,22 +1747,45 @@ function CallPanel({
               {conversationName} • {getCallModeText(callSession.mode)}
             </p>
 
-            <p
-              style={{
-                margin: "7px 0 0",
-                color: "#8f9ac7",
-                fontSize: 11,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-              }}
-            >
-              <Clock size={12} />
-              {formatDuration(elapsed)}
-            </p>
+            {!isIncoming && (
+              <p
+                style={{
+                  margin: "7px 0 0",
+                  color: "#8f9ac7",
+                  fontSize: 11,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
+                <Clock size={12} />
+                {formatDuration(elapsed)}
+              </p>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {isIncoming ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onDecline}
+                  title="Rechazar llamada"
+                  style={callButtonStyle("#ef4444")}
+                >
+                  <PhoneOff size={17} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onAccept}
+                  title="Aceptar llamada"
+                  style={callButtonStyle("#22c55e")}
+                >
+                  <Phone size={17} />
+                </button>
+              </>
+            ) : (
+              <>
             {studioEnabled && (
               <>
                 <CallModeButton
@@ -1441,6 +1861,8 @@ function CallPanel({
             >
               <PhoneOff size={17} />
             </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1467,6 +1889,38 @@ function CallModeButton({ active, children, title, onClick }) {
         justifyContent: "center",
         cursor: active ? "default" : "pointer",
         opacity: active ? 1 : 0.82,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function HeaderActionButton({ children, title, onClick }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 8,
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#565f89",
+      }}
+      onMouseEnter={(event) => {
+        event.currentTarget.style.background = "#1a1b26";
+        event.currentTarget.style.color = "#c0caf5";
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.background = "transparent";
+        event.currentTarget.style.color = "#565f89";
       }}
     >
       {children}
@@ -1529,31 +1983,21 @@ async function buildAttachmentPayload(file) {
     throw new Error("Archivo inválido");
   }
 
-  const dataUrl = await readFileAsDataURL(file);
+  const previewUrl = URL.createObjectURL(file);
   const kind = getAttachmentKind(file.type);
   const messageType = getMessageTypeFromFile(file.type);
 
   return {
     id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    file,
     name: file.name,
     size: file.size,
     type: file.type || "application/octet-stream",
     kind,
     messageType,
-    dataUrl,
+    previewUrl,
     createdAt: new Date().toISOString(),
   };
-}
-
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-
-    reader.readAsDataURL(file);
-  });
 }
 
 function getAttachmentKind(mimeType = "") {
@@ -1570,6 +2014,68 @@ function getAttachmentKind(mimeType = "") {
   }
 
   return "file";
+}
+
+function buildUploadedAttachment(draftAttachment, uploadedMedia) {
+  return {
+    id: uploadedMedia.id || draftAttachment.id,
+    mediaId: uploadedMedia.id,
+    name: uploadedMedia.fileName || uploadedMedia.name || draftAttachment.name,
+    size: uploadedMedia.size || draftAttachment.size,
+    type: uploadedMedia.contentType || uploadedMedia.type || draftAttachment.type,
+    kind: draftAttachment.kind,
+    messageType: draftAttachment.messageType,
+    url: uploadedMedia.url,
+    createdAt: uploadedMedia.createdAt || new Date().toISOString(),
+  };
+}
+
+function revokeAttachmentPreview(attachment) {
+  if (attachment?.previewUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(attachment.previewUrl);
+  }
+}
+
+async function requestCallStream(mode) {
+  if (mode === "screen") {
+    return navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+    });
+  }
+
+  return navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: mode === "video",
+  });
+}
+
+function createCallId() {
+  return crypto.randomUUID?.() || `call-${Date.now()}-${Math.random()}`;
+}
+
+function getProfileId(profile) {
+  return profile?.id || profile?.userId || profile?.userID || profile?.uuid || null;
+}
+
+function isCallSignalForConversation(event, conversationId, currentUserId) {
+  if (!CALL_SIGNAL_TYPES.has(event?.type)) {
+    return false;
+  }
+
+  if (!event.conversationId || String(event.conversationId) !== String(conversationId)) {
+    return false;
+  }
+
+  return String(event.senderId || "") !== String(currentUserId || "");
+}
+
+function parseCallPayload(content) {
+  try {
+    return typeof content === "string" ? JSON.parse(content) : content;
+  } catch {
+    return null;
+  }
 }
 
 function getMessageTypeFromFile(mimeType = "") {
@@ -1601,6 +2107,17 @@ function getSearchableMessageText(message) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function getAttachmentSourceUrl(attachment) {
+  return (
+    attachment?.url ||
+    attachment?.contentUrl ||
+    attachment?.downloadUrl ||
+    attachment?.dataUrl ||
+    attachment?.previewUrl ||
+    ""
+  );
 }
 
 function parseMessageContent(content) {
