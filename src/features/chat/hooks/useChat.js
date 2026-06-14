@@ -57,6 +57,22 @@ export function useChat(conversationId) {
       );
       return newMessage;
     } catch (err) {
+      const recoveredMessages = await chatService.getMessages(conversationId)
+        .catch(() => null);
+      const recoveredMessage = findRecoveredSentMessage(
+        recoveredMessages,
+        content,
+        options.type || "TEXT",
+      );
+
+      if (recoveredMessage) {
+        setMessages((currentMessages) =>
+          upsertMessages(currentMessages, recoveredMessages),
+        );
+        setError(null);
+        return recoveredMessage;
+      }
+
       setError(err.message);
       throw err;
     } finally {
@@ -147,4 +163,18 @@ function upsertMessages(currentMessages, nextMessages) {
 
     return aTimestamp - bTimestamp;
   });
+}
+
+function findRecoveredSentMessage(messages, content, type) {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+
+  return [...messages]
+    .reverse()
+    .find((message) =>
+      message.mine &&
+      message.content === content &&
+      (message.type || "TEXT") === type,
+    ) || null;
 }

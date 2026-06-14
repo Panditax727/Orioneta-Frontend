@@ -27,6 +27,7 @@ export function useRealtimeConnection() {
   const retryTimerRef = useRef(null);
   const retryCountRef = useRef(0);
   const manualCloseRef = useRef(false);
+  const pendingOutgoingEventsRef = useRef([]);
   const [status, setStatus] = useState("idle");
   const [lastEventAt, setLastEventAt] = useState(null);
   const [sessionIdentity, setSessionIdentity] = useState(() => getSessionIdentity());
@@ -83,6 +84,7 @@ export function useRealtimeConnection() {
       socket.addEventListener("open", () => {
         retryCountRef.current = 0;
         setStatus("connected");
+        flushPendingOutgoingEvents(socket, pendingOutgoingEventsRef);
       });
 
       socket.addEventListener("message", (event) => {
@@ -158,6 +160,16 @@ export function useRealtimeConnection() {
 
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(event));
+      return;
+    }
+
+    pendingOutgoingEventsRef.current = [
+      ...pendingOutgoingEventsRef.current.slice(-24),
+      event,
+    ];
+
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+      void connectRef.current?.({ reconnect: true });
     }
   }), []);
 
@@ -169,4 +181,17 @@ export function useRealtimeConnection() {
     reconnect,
     disconnect,
   }), [disconnect, lastEventAt, reconnect, status]);
+}
+
+function flushPendingOutgoingEvents(socket, pendingOutgoingEventsRef) {
+  if (socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  const pendingEvents = pendingOutgoingEventsRef.current;
+  pendingOutgoingEventsRef.current = [];
+
+  pendingEvents.forEach((event) => {
+    socket.send(JSON.stringify(event));
+  });
 }

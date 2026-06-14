@@ -4,6 +4,7 @@ import {
   Clock,
   FileText,
   Image as ImageIcon,
+  Info,
   MessageSquare,
   Mic,
   MicOff,
@@ -15,12 +16,16 @@ import {
   Send,
   Smile,
   Sparkles,
+  UserRound,
   Video,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { uploadMediaFile } from "../../../services/mediaService";
-import { ensureCurrentUserProfile } from "../../../services/userService";
+import {
+  ensureCurrentUserProfile,
+  findUserById,
+} from "../../../services/userService";
 import { useCustomization } from "../../customization/hooks/useCustomization";
 import {
   publishRealtimeEvent,
@@ -61,14 +66,22 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [callSession, setCallSession] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [friendProfile, setFriendProfile] = useState(null);
+  const [profilePanelOpen, setProfilePanelOpen] = useState(false);
 
   const fileInputRef = useRef(null);
+  const composerInputRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteMediaRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const pendingIceCandidatesRef = useRef([]);
   const callSessionRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const latestMessageKeyRef = useRef(null);
+  const pendingOutgoingDraftRef = useRef(null);
 
   const { messages, loading, sending, error, sendMessage } = useChat(
     conversation?.id,
@@ -92,7 +105,12 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const messagePadding = compactMode ? "14px 16px" : "20px";
   const inputPadding = compactMode ? "10px 16px" : "16px 20px";
   const messageGap = compactMode ? 2 : 4;
-  const conversationAvatarImage = getAvatarImage(conversation);
+  const profileForPanel = useMemo(
+    () => buildConversationProfile(conversation, friendProfile),
+    [conversation, friendProfile],
+  );
+  const conversationAvatarImage =
+    getAvatarImage(profileForPanel) || getAvatarImage(conversation);
   const enabledMods = useMemo(
     () => new Set(userCustomization?.enabledMods || []),
     [userCustomization?.enabledMods],
@@ -104,6 +122,47 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   useEffect(() => {
     callSessionRef.current = callSession;
   }, [callSession]);
+
+  useEffect(() => {
+    latestMessageKeyRef.current = null;
+    shouldStickToBottomRef.current = true;
+    scrollMessagesToBottom("auto");
+    queueMicrotask(() => setProfilePanelOpen(false));
+  }, [conversation?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    queueMicrotask(() => {
+      if (mounted) {
+        setFriendProfile(null);
+      }
+    });
+
+    async function resolveFriendProfile() {
+      if (!conversation?.friendId) {
+        return;
+      }
+
+      try {
+        const profile = await findUserById(conversation.friendId);
+
+        if (mounted) {
+          setFriendProfile(profile);
+        }
+      } catch {
+        if (mounted) {
+          setFriendProfile(null);
+        }
+      }
+    }
+
+    void resolveFriendProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [conversation?.friendId]);
 
   useEffect(() => {
     if (localVideoRef.current) {
@@ -161,6 +220,79 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     );
   }, [messageSearch, messages]);
 
+  const latestVisibleMessage = visibleMessages.at(-1);
+
+  useEffect(() => {
+    const latestKey = latestVisibleMessage
+      ? `${latestVisibleMessage.id || latestVisibleMessage.createdAt || ""}:${latestVisibleMessage.content || ""}`
+      : null;
+    const previousKey = latestMessageKeyRef.current;
+    const isNewMessage = Boolean(latestKey && previousKey && latestKey !== previousKey);
+
+    if (latestKey) {
+      latestMessageKeyRef.current = latestKey;
+    }
+
+    if (!latestVisibleMessage) {
+      return;
+    }
+
+    const shouldScroll =
+      shouldStickToBottomRef.current ||
+      latestVisibleMessage.mine ||
+      !previousKey;
+
+    if (shouldScroll) {
+      scrollMessagesToBottom(isNewMessage ? "smooth" : "auto");
+    }
+
+    const pendingOutgoingDraft = pendingOutgoingDraftRef.current;
+
+    if (
+      pendingOutgoingDraft &&
+      latestVisibleMessage.mine &&
+      latestVisibleMessage.content === pendingOutgoingDraft.content
+    ) {
+      pendingOutgoingDraftRef.current = null;
+      setMessage((current) =>
+        current === pendingOutgoingDraft.draftText ? "" : current,
+      );
+      setNotice("");
+      shouldStickToBottomRef.current = true;
+      scrollMessagesToBottom("smooth");
+      playFeedbackSound("send");
+      window.requestAnimationFrame(() => {
+        composerInputRef.current?.focus();
+      });
+    }
+
+    if (isNewMessage && !latestVisibleMessage.mine) {
+      playFeedbackSound("receive");
+    }
+  }, [latestVisibleMessage]);
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    shouldStickToBottomRef.current = distanceFromBottom < 96;
+  };
+
+  function scrollMessagesToBottom(behavior = "smooth") {
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        block: "end",
+        behavior,
+      });
+    });
+  }
+
   const handleAttachmentSelect = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -191,6 +323,8 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       return;
     }
 
+    let outgoingDraft = null;
+
     try {
       if (pendingAttachment) {
         setNotice("Subiendo archivo...");
@@ -209,22 +343,44 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           attachment: uploadedAttachment,
         });
 
+        outgoingDraft = {
+          content: payload,
+          draftText: message,
+        };
+        pendingOutgoingDraftRef.current = outgoingDraft;
         await sendMessage(payload, { type: uploadedAttachment.messageType });
         revokeAttachmentPreview(pendingAttachment);
         setPendingAttachment(null);
       } else {
-        await sendMessage(message.trim());
+        const content = message.trim();
+
+        outgoingDraft = {
+          content,
+          draftText: message,
+        };
+        pendingOutgoingDraftRef.current = outgoingDraft;
+        await sendMessage(content);
       }
 
+      pendingOutgoingDraftRef.current = null;
       setMessage("");
       setNotice("");
+      shouldStickToBottomRef.current = true;
+      scrollMessagesToBottom("smooth");
+      playFeedbackSound("send");
+      window.requestAnimationFrame(() => {
+        composerInputRef.current?.focus();
+      });
     } catch (err) {
       console.error("Error al enviar mensaje:", err);
-      setNotice(
-        err.status === 502
-          ? "El servicio de archivos aun no esta disponible en el servidor"
-          : "No se pudo enviar el mensaje",
-      );
+
+      if (pendingOutgoingDraftRef.current === outgoingDraft) {
+        setNotice(
+          err.status === 502
+            ? "El servicio de archivos aun no esta disponible en el servidor"
+            : "No se pudo enviar el mensaje",
+        );
+      }
     }
   };
 
@@ -305,6 +461,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
     try {
       closeCallResources();
       setNotice("");
+      setProfilePanelOpen(false);
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setNotice("Tu navegador no permite iniciar llamadas desde aqui");
@@ -366,6 +523,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         mode,
         offer,
       });
+      playFeedbackSound("call");
     } catch (callError) {
       const label =
         mode === "screen" ? "compartir pantalla" : "iniciar la llamada";
@@ -513,6 +671,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         return;
       }
 
+      setProfilePanelOpen(false);
       setCallSession({
         callId: payload.callId,
         mode: payload.mode || "audio",
@@ -526,6 +685,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         startedAt: null,
         participantName: conversation.name,
       });
+      playFeedbackSound("call");
       return;
     }
 
@@ -680,10 +840,12 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         background: visuals.chatBackground,
         backgroundImage: ambientChatEnabled
           ? "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)"
-          : "none",
+          : "radial-gradient(circle at 18% 12%, rgba(124,58,237,0.08), transparent 24%), radial-gradient(circle at 86% 18%, rgba(59,130,246,0.05), transparent 28%)",
         backgroundSize: ambientChatEnabled ? "28px 28px" : "auto",
         minWidth: 0,
         fontFamily: visuals.fontFamily,
+        position: "relative",
+        overflow: "hidden",
       }}
     >
       <div
@@ -696,9 +858,18 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           alignItems: "center",
           justifyContent: "space-between",
           background: "rgba(13, 14, 20, 0.94)",
+          gap: 10,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            minWidth: 0,
+            flex: "1 1 auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
           {isMobile && (
             <button
               type="button"
@@ -727,7 +898,10 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
             </button>
           )}
 
-          <div
+          <button
+            type="button"
+            onClick={() => setProfilePanelOpen(true)}
+            title={`Ver perfil de ${conversation.name}`}
             style={{
               width: 34,
               height: 34,
@@ -740,6 +914,9 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
               color: "white",
               fontSize: 13,
               fontWeight: 600,
+              border: "1px solid rgba(255,255,255,0.08)",
+              cursor: "pointer",
+              padding: 0,
             }}
           >
             {conversationAvatarImage ? (
@@ -751,9 +928,20 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
             ) : (
               conversation.avatar || conversation.name?.[0] || "?"
             )}
-          </div>
+          </button>
 
-          <div>
+          <button
+            type="button"
+            onClick={() => setProfilePanelOpen(true)}
+            style={{
+              minWidth: 0,
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <p
                 style={{
@@ -785,10 +973,25 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
                   ? "En línea"
                   : "Disponible en este dispositivo"}
             </p>
-          </div>
+          </button>
         </div>
 
-        <div style={{ display: "flex", gap: 4 }}>
+        <div
+          style={{
+            maxWidth: isMobile ? 146 : "none",
+            flexShrink: 0,
+            display: "flex",
+            gap: isMobile ? 2 : 4,
+            overflowX: isMobile ? "auto" : "visible",
+            scrollbarWidth: "none",
+          }}
+        >
+          <HeaderActionButton
+            title="Ver perfil"
+            onClick={() => setProfilePanelOpen(true)}
+          >
+            <Info size={18} />
+          </HeaderActionButton>
           <HeaderActionButton title="Llamada" onClick={() => void startCall("audio")}>
             <Phone size={18} />
           </HeaderActionButton>
@@ -816,13 +1019,22 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           callSession={callSession}
           localVideoRef={localVideoRef}
           remoteMediaRef={remoteMediaRef}
+          participantAvatar={conversationAvatarImage}
           studioEnabled={callStudioEnabled}
+          isMobile={isMobile}
           onAccept={acceptCall}
           onDecline={declineCall}
           onToggleAudio={toggleAudio}
           onToggleCamera={toggleCamera}
           onSwitchMode={startCall}
           onEnd={endCall}
+        />
+      )}
+
+      {profilePanelOpen && profileForPanel && (
+        <FriendProfilePanel
+          profile={profileForPanel}
+          onClose={() => setProfilePanelOpen(false)}
         />
       )}
 
@@ -883,6 +1095,8 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       )}
 
       <div
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
         style={{
           flex: 1,
           overflowY: "auto",
@@ -890,6 +1104,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           display: "flex",
           flexDirection: "column",
           gap: messageGap,
+          scrollBehavior: "smooth",
         }}
       >
         {loading ? (
@@ -940,6 +1155,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
             />
           ))
         )}
+        <div ref={messagesEndRef} style={{ width: 1, height: 1, flexShrink: 0 }} />
       </div>
 
       <div
@@ -1004,10 +1220,15 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
           </IconButton>
 
           <textarea
+            ref={composerInputRef}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Escribe un mensaje a ${conversation.name}...`}
+            placeholder={
+              isMobile
+                ? "Mensaje..."
+                : `Escribe un mensaje a ${conversation.name}...`
+            }
             rows={1}
             style={{
               flex: 1,
@@ -1222,6 +1443,184 @@ function MessageAvatar({ photo, initial, compactMode, visuals }) {
       ) : (
         initial
       )}
+    </div>
+  );
+}
+
+function FriendProfilePanel({ profile, onClose }) {
+  const avatarImage = getAvatarImage(profile);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 60,
+        right: 18,
+        zIndex: 35,
+        width: "min(360px, calc(100% - 36px))",
+        borderRadius: 22,
+        overflow: "hidden",
+        background:
+          "linear-gradient(180deg, rgba(19,20,28,0.98), rgba(13,14,20,0.98))",
+        border: "1px solid rgba(167,139,250,0.22)",
+        boxShadow: "0 28px 70px rgba(0,0,0,0.46)",
+      }}
+    >
+      <div
+        style={{
+          height: 88,
+          background:
+            "linear-gradient(135deg, rgba(124,58,237,0.86), rgba(79,70,229,0.54))",
+          position: "relative",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          title="Cerrar perfil"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.16)",
+            background: "rgba(0,0,0,0.18)",
+            color: "white",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div style={{ padding: "0 18px 18px" }}>
+        <div
+          style={{
+            width: 76,
+            height: 76,
+            marginTop: -38,
+            borderRadius: "50%",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+            border: "4px solid #13141c",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white",
+            fontSize: 24,
+            fontWeight: 900,
+          }}
+        >
+          {avatarImage ? (
+            <img
+              src={avatarImage}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            profile.avatar || profile.name?.[0] || <UserRound size={30} />
+          )}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3
+              style={{
+                margin: 0,
+                color: "#f8f7ff",
+                fontSize: 18,
+                fontWeight: 900,
+                letterSpacing: 0,
+              }}
+            >
+              {profile.name}
+            </h3>
+            <ProfileBadges badges={profile.badges} compact max={3} />
+          </div>
+
+          <p style={{ margin: "4px 0 0", color: "#8f9ac7", fontSize: 12 }}>
+            {profile.userName || profile.email || "Perfil Orioneta"}
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            marginTop: 16,
+          }}
+        >
+          <ProfileStat label="Estado" value={profile.status || "Disponible"} />
+          <ProfileStat label="Codigo" value={profile.friendCode || "Privado"} />
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            borderRadius: 14,
+            background: "#0d0e14",
+            border: "1px solid #1e2030",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              color: "#c0caf5",
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            {profile.bio || "Aun no ha escrito una biografia."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileStat({ label, value }) {
+  return (
+    <div
+      style={{
+        minWidth: 0,
+        padding: "10px 11px",
+        borderRadius: 13,
+        background: "#0d0e14",
+        border: "1px solid #1e2030",
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          color: "#565f89",
+          fontSize: 10,
+          fontWeight: 900,
+          textTransform: "uppercase",
+          letterSpacing: 0.4,
+        }}
+      >
+        {label}
+      </p>
+      <p
+        style={{
+          margin: "4px 0 0",
+          color: "#c0caf5",
+          fontSize: 12,
+          fontWeight: 800,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -1549,7 +1948,9 @@ function CallPanel({
   callSession,
   localVideoRef,
   remoteMediaRef,
+  participantAvatar,
   studioEnabled,
+  isMobile,
   onAccept,
   onDecline,
   onToggleAudio,
@@ -1579,30 +1980,40 @@ function CallPanel({
   return (
     <div
       style={{
-        padding: "14px 20px",
-        borderBottom: "1px solid #1e2030",
-        background:
-          "linear-gradient(135deg, rgba(124,58,237,0.18), rgba(13,14,20,0.96))",
+        position: "absolute",
+        inset: isMobile ? "64px 10px 104px" : "76px 24px 128px",
+        zIndex: 40,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
       }}
     >
       <div
         style={{
-          border: "1px solid #2d2f45",
-          borderRadius: 18,
+          width: isVideoLike ? "min(980px, 100%)" : "min(680px, 100%)",
+          maxHeight: "100%",
+          border: "1px solid rgba(167, 139, 250, 0.28)",
+          borderRadius: 24,
           overflow: "hidden",
-          background: "#0d0e14",
+          background:
+            "linear-gradient(180deg, rgba(19,20,28,0.96), rgba(7,8,13,0.98))",
+          boxShadow: "0 28px 80px rgba(0,0,0,0.52)",
+          pointerEvents: "auto",
+          backdropFilter: "blur(14px)",
         }}
       >
         {!isVideoLike && (
           <div
             style={{
-              minHeight: 112,
+              minHeight: isMobile ? 240 : 280,
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: 14,
+              gap: 16,
               background:
-                "linear-gradient(135deg, rgba(124,58,237,0.12), #05060a)",
+                "radial-gradient(circle at center, rgba(124,58,237,0.22), transparent 58%), linear-gradient(135deg, rgba(124,58,237,0.16), #05060a)",
             }}
             >
               {hasRemoteStream && (
@@ -1610,23 +2021,33 @@ function CallPanel({
               )}
               <div
                 style={{
-                width: 58,
-                height: 58,
+                width: 86,
+                height: 86,
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 color: "white",
+                overflow: "hidden",
+                boxShadow: "0 0 0 10px rgba(124,58,237,0.10)",
               }}
             >
-              <Phone size={24} />
+              {participantAvatar ? (
+                <img
+                  src={participantAvatar}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <Phone size={30} />
+              )}
             </div>
-              <div>
-                <p style={{ margin: 0, color: "#c0caf5", fontSize: 15, fontWeight: 800 }}>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ margin: 0, color: "#f8f7ff", fontSize: 18, fontWeight: 900 }}>
                   {isIncoming ? "Llamada entrante" : "Voz activa"}
                 </p>
-                <p style={{ margin: "3px 0 0", color: "#565f89", fontSize: 12 }}>
+                <p style={{ margin: "6px 0 0", color: "#8f9ac7", fontSize: 13 }}>
                   {isIncoming
                     ? "Puedes aceptar o rechazar"
                     : isConnecting
@@ -1640,7 +2061,8 @@ function CallPanel({
         {isVideoLike && (
           <div
             style={{
-              height: 180,
+              height: isMobile ? "52vh" : "min(58vh, 520px)",
+              minHeight: 320,
               background: "#05060a",
               position: "relative",
               overflow: "hidden",
@@ -1654,7 +2076,7 @@ function CallPanel({
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
+                  objectFit: callSession.mode === "screen" ? "contain" : "cover",
                 }}
               />
             ) : (
@@ -1666,7 +2088,7 @@ function CallPanel({
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
+                  objectFit: callSession.mode === "screen" ? "contain" : "cover",
                   opacity: callSession.cameraOff || isIncoming ? 0.2 : 1,
                 }}
               />
@@ -1682,12 +2104,13 @@ function CallPanel({
                   position: "absolute",
                   right: 12,
                   bottom: 12,
-                  width: 112,
-                  height: 72,
+                  width: isMobile ? 108 : 168,
+                  height: isMobile ? 72 : 104,
                   objectFit: "cover",
-                  borderRadius: 12,
+                  borderRadius: 16,
                   border: "1px solid rgba(255,255,255,0.16)",
                   background: "#0d0e14",
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
                 }}
               />
             )}
@@ -1701,7 +2124,8 @@ function CallPanel({
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#565f89",
-                  fontSize: 13,
+                  fontSize: 14,
+                  fontWeight: 800,
                 }}
               >
                 {isIncoming
@@ -1718,11 +2142,12 @@ function CallPanel({
 
         <div
           style={{
-            padding: 14,
+            padding: isMobile ? 12 : 16,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: 14,
+            flexWrap: isMobile ? "wrap" : "nowrap",
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -1966,6 +2391,126 @@ function getAvatarImage(conversation) {
   }
 
   return /^(data:image|blob:|https?:\/\/)/i.test(candidate) ? candidate : "";
+}
+
+function buildConversationProfile(conversation, friendProfile) {
+  if (!conversation && !friendProfile) {
+    return null;
+  }
+
+  const source = friendProfile || conversation || {};
+  const name =
+    source.displayName ||
+    source.name ||
+    source.userName ||
+    source.username ||
+    source.email ||
+    conversation?.name ||
+    "Contacto Orioneta";
+
+  return {
+    ...source,
+    name,
+    userName: source.userName || source.username || conversation?.userName || "",
+    email: source.email || conversation?.email || "",
+    friendCode: source.friendCode || conversation?.friendCode || "",
+    status: source.status || (conversation?.online ? "ONLINE" : "Disponible"),
+    bio: source.bio || conversation?.bio || "",
+    avatar:
+      source.avatar ||
+      conversation?.avatar ||
+      name.trim().charAt(0).toUpperCase() ||
+      "O",
+    avatarPhoto:
+      source.profilePhoto ||
+      source.avatarPhoto ||
+      source.avatarUrl ||
+      conversation?.avatarPhoto ||
+      "",
+    badges: source.badges || conversation?.badges || [],
+  };
+}
+
+function playFeedbackSound(kind) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContext) {
+    return;
+  }
+
+  try {
+    const context = getFeedbackAudioContext(AudioContext);
+    const now = context.currentTime;
+    const gain = context.createGain();
+    const oscillator = context.createOscillator();
+    const config = getFeedbackSoundConfig(kind);
+
+    oscillator.type = config.type;
+    oscillator.frequency.setValueAtTime(config.startFrequency, now);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      config.endFrequency,
+      now + config.duration,
+    );
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(config.volume, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + config.duration);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + config.duration + 0.03);
+  } catch {
+    // El navegador puede bloquear audio si todavia no hubo gesto del usuario.
+  }
+}
+
+function getFeedbackAudioContext(AudioContext) {
+  if (!window.__orionetaFeedbackAudioContext) {
+    window.__orionetaFeedbackAudioContext = new AudioContext();
+  }
+
+  const context = window.__orionetaFeedbackAudioContext;
+
+  if (context.state === "suspended") {
+    void context.resume();
+  }
+
+  return context;
+}
+
+function getFeedbackSoundConfig(kind) {
+  if (kind === "receive") {
+    return {
+      type: "triangle",
+      startFrequency: 660,
+      endFrequency: 880,
+      duration: 0.1,
+      volume: 0.035,
+    };
+  }
+
+  if (kind === "call") {
+    return {
+      type: "sine",
+      startFrequency: 520,
+      endFrequency: 700,
+      duration: 0.16,
+      volume: 0.045,
+    };
+  }
+
+  return {
+    type: "sine",
+    startFrequency: 880,
+    endFrequency: 1240,
+    duration: 0.08,
+    volume: 0.03,
+  };
 }
 
 function stopMediaStream(stream) {

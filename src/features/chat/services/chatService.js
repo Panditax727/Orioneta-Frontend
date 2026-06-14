@@ -505,11 +505,13 @@ async function normalizeBackendMessage(
 }
 
 async function normalizeBackendMessages(messages, currentUserId, currentProfile = null) {
-  return Promise.all(
+  const normalizedMessages = await Promise.all(
     sortRawMessages(messages || []).map((message) =>
       normalizeBackendMessage(message, currentUserId, currentProfile),
     ),
   );
+
+  return collapseNearDuplicateMessages(normalizedMessages);
 }
 
 async function normalizeBackendConversation(
@@ -833,7 +835,7 @@ async function sendMessageWithFallback(payload) {
       body: payload,
     });
   } catch (error) {
-    if (!shouldUseBffFallback(error)) {
+    if (!shouldUseBffFallback(error) || error.status >= 500) {
       throw error;
     }
 
@@ -842,6 +844,36 @@ async function sendMessageWithFallback(payload) {
       body: payload,
     });
   }
+}
+
+function collapseNearDuplicateMessages(messages) {
+  return messages.reduce((uniqueMessages, message) => {
+    const previousMessage = uniqueMessages.at(-1);
+
+    if (
+      previousMessage &&
+      previousMessage.senderId === message.senderId &&
+      previousMessage.content === message.content &&
+      previousMessage.type === message.type &&
+      areCloseTimestamps(previousMessage.createdAt, message.createdAt)
+    ) {
+      return uniqueMessages;
+    }
+
+    uniqueMessages.push(message);
+    return uniqueMessages;
+  }, []);
+}
+
+function areCloseTimestamps(firstValue, secondValue) {
+  const firstTimestamp = Date.parse(firstValue || "");
+  const secondTimestamp = Date.parse(secondValue || "");
+
+  if (Number.isNaN(firstTimestamp) || Number.isNaN(secondTimestamp)) {
+    return false;
+  }
+
+  return Math.abs(firstTimestamp - secondTimestamp) <= 10000;
 }
 
 function shouldUseBffFallback(error) {
