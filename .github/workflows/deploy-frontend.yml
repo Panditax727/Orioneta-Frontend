@@ -111,7 +111,7 @@ jobs:
               -p 443:443 \
               -p 443:443/udp \
               -e BACKEND_UPSTREAM="$BACKEND_UPSTREAM" \
-              -e ORIONETA_DOMAIN=orioneta.duckdns.org \
+              -e ORIONETA_DOMAIN=orioneta.accesscam.org \
               -v /opt/orioneta/Caddyfile:/etc/caddy/Caddyfile:ro \
               -v /opt/orioneta/caddy-data:/data \
               -v /opt/orioneta/caddy-config:/config \

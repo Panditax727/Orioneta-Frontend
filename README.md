@@ -158,7 +158,7 @@ cp .env.example .env
 Para trabajar contra el servidor actual:
 
 ```env
-VITE_API_BASE_URL=http://orioneta.duckdns.org
+VITE_API_BASE_URL=https://orioneta.accesscam.org
 ```
 
 Si cambias de EC2 o usas un balanceador, reemplaza el valor por la URL publica
@@ -225,7 +225,7 @@ Healthcheck:
 http://localhost:5173/health
 ```
 
-### HTTPS en `orioneta.duckdns.org`
+### HTTPS en `orioneta.accesscam.org`
 
 Para que llamadas, cámara y compartir pantalla funcionen en navegadores reales,
 la app debe correr bajo HTTPS. En Amazon Linux 2023 la opción más práctica es
@@ -234,11 +234,11 @@ usar Caddy como contenedor Docker y dejar el frontend en una red Docker interna.
 Requisitos:
 
 ```text
-DuckDNS: orioneta.duckdns.org -> 3.208.164.144
+Dynu: orioneta.accesscam.org -> 3.82.134.149
 AWS Security Group: abrir 80/tcp y 443/tcp
 Caddy Docker: publicar 80/tcp y 443/tcp
 Frontend Docker: sin puertos publicos, conectado a orioneta-public
-Backend: accesible desde el frontend por 10.0.0.236:8080
+Backend: accesible mediante el NLB publico de EKS configurado en BACKEND_UPSTREAM
 ```
 
 Red compartida:
@@ -262,7 +262,7 @@ docker run -d \
 Caddyfile recomendado:
 
 ```caddyfile
-orioneta.duckdns.org {
+orioneta.accesscam.org {
   encode zstd gzip
 
   reverse_proxy orioneta-frontend:80
@@ -294,8 +294,8 @@ puertos directos. Caddy queda encargado de los certificados y del tráfico
 publico. Con HTTPS activo, el frontend usa rutas same-origin:
 
 ```text
-https://orioneta.duckdns.org/api
-wss://orioneta.duckdns.org/ws/chat
+https://orioneta.accesscam.org/api
+wss://orioneta.accesscam.org/ws/chat
 ```
 
 ---
