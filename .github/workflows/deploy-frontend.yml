@@ -41,26 +41,91 @@ jobs:
     needs: build-and-push
 
     steps:
-      - name: Deploy container on EC2
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Allow this runner through SSH
+        id: runner-ip
+        run: |
+          set -euo pipefail
+          runner_ip="$(curl --fail --silent --show-error https://checkip.amazonaws.com | tr -d '[:space:]')"
+          echo "cidr=${runner_ip}/32" >> "${GITHUB_OUTPUT}"
+
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --protocol tcp \
+            --port "${{ secrets.EC2_PORT }}" \
+            --cidr "${runner_ip}/32"
+
+      - name: Upload Caddy configuration
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          source: deploy/Caddyfile
+          target: /tmp/orioneta-deploy
+
+      - name: Deploy containers on EC2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT }}
           script: |
-            set -e
+            set -eu
 
             IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest"
+            BACKEND_UPSTREAM="${{ secrets.BACKEND_UPSTREAM }}"
 
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             docker pull "$IMAGE"
             docker network create orioneta-public || true
-            docker network connect orioneta-public orioneta-caddy || true
+
+            sudo mkdir -p /opt/orioneta/caddy-data /opt/orioneta/caddy-config
+            sudo install -m 644 /tmp/orioneta-deploy/deploy/Caddyfile /opt/orioneta/Caddyfile
+
             docker rm -f "${{ env.CONTAINER_NAME }}" || true
             docker run -d \
               --name "${{ env.CONTAINER_NAME }}" \
               --restart unless-stopped \
               --network orioneta-public \
               "$IMAGE"
+
+            docker rm -f orioneta-caddy || true
+            docker run -d \
+              --name orioneta-caddy \
+              --restart unless-stopped \
+              --network orioneta-public \
+              -p 80:80 \
+              -p 443:443 \
+              -p 443:443/udp \
+              -e BACKEND_UPSTREAM="$BACKEND_UPSTREAM" \
+              -e ORIONETA_DOMAIN=orioneta.duckdns.org \
+              -v /opt/orioneta/Caddyfile:/etc/caddy/Caddyfile:ro \
+              -v /opt/orioneta/caddy-data:/data \
+              -v /opt/orioneta/caddy-config:/config \
+              caddy:2-alpine
+
+            docker exec orioneta-caddy caddy validate --config /etc/caddy/Caddyfile
+            docker exec "${{ env.CONTAINER_NAME }}" wget -qO- http://localhost/health
             docker image prune -f
+
+      - name: Revoke runner SSH access
+        if: ${{ always() && steps.runner-ip.outputs.cidr != '' }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --protocol tcp \
+            --port "${{ secrets.EC2_PORT }}" \
+            --cidr "${{ steps.runner-ip.outputs.cidr }}" || true
