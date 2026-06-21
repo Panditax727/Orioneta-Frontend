@@ -50,6 +50,7 @@ export const theme = {
     lg: "0 10px 15px rgba(0, 0, 0, 0.3)",
     xl: "0 20px 25px rgba(0, 0, 0, 0.3)",
     primary: "0 4px 12px rgba(124, 58, 237, 0.3)",
+    secondary: "0 2px 8px rgba(0, 0, 0, 0.2)",
   },
   typography: {
     fontFamily: "Inter, system-ui, -apple-system, sans-serif",

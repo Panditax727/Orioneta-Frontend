@@ -6,6 +6,8 @@ import RegisterPage from "./features/auth/components/RegisterPage";
 import ChatLayout from "./features/chat/components/ChatLayout";
 import ChannelsPage from "./features/channels/components/Channels";
 import PrivacyDataPage from "./features/legal/components/PrivacyDataPage";
+import { SettingsPage } from "./features/settings";
+import { ThemeMarket } from "./features/themes";
 
 function App() {
   return (
@@ -30,6 +32,22 @@ function App() {
           element={
             <ProtectedRoute>
               <ChannelsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/themes"
+          element={
+            <ProtectedRoute>
+              <ThemeMarket />
             </ProtectedRoute>
           }
         />
