@@ -88,22 +88,22 @@ jobs:
             IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest"
             BACKEND_UPSTREAM="${{ secrets.BACKEND_UPSTREAM }}"
 
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-            docker pull "$IMAGE"
-            docker network create orioneta-public || true
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | sudo docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            sudo docker pull "$IMAGE"
+            sudo docker network create orioneta-public || true
 
             sudo mkdir -p /opt/orioneta/caddy-data /opt/orioneta/caddy-config
             sudo install -m 644 /tmp/orioneta-deploy/deploy/Caddyfile /opt/orioneta/Caddyfile
 
-            docker rm -f "${{ env.CONTAINER_NAME }}" || true
-            docker run -d \
+            sudo docker rm -f "${{ env.CONTAINER_NAME }}" || true
+            sudo docker run -d \
               --name "${{ env.CONTAINER_NAME }}" \
               --restart unless-stopped \
               --network orioneta-public \
               "$IMAGE"
 
-            docker rm -f orioneta-caddy || true
-            docker run -d \
+            sudo docker rm -f orioneta-caddy || true
+            sudo docker run -d \
               --name orioneta-caddy \
               --restart unless-stopped \
               --network orioneta-public \
@@ -117,9 +117,9 @@ jobs:
               -v /opt/orioneta/caddy-config:/config \
               caddy:2-alpine
 
-            docker exec orioneta-caddy caddy validate --config /etc/caddy/Caddyfile
-            docker exec "${{ env.CONTAINER_NAME }}" wget -qO- http://localhost/health
-            docker image prune -f
+            sudo docker exec orioneta-caddy caddy validate --config /etc/caddy/Caddyfile
+            sudo docker exec "${{ env.CONTAINER_NAME }}" wget -qO- http://localhost/health
+            sudo docker image prune -f
 
       - name: Revoke runner SSH access
         if: ${{ always() && steps.runner-ip.outputs.cidr != '' }}
