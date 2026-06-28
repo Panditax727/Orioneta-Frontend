@@ -1,4 +1,4 @@
-{$ORIONETA_DOMAIN:orioneta.accesscam.org} {
+(orioneta_app) {
 	encode zstd gzip
 
 	@backend {
@@ -12,4 +12,12 @@
 	handle {
 		reverse_proxy orioneta-public-frontend:80
 	}
+}
+
+:80 {
+	import orioneta_app
+}
+
+{$ORIONETA_DOMAIN:orioneta.accesscam.org} {
+	import orioneta_app
 }
