@@ -6,10 +6,10 @@
 	}
 
 	handle @backend {
-		reverse_proxy {$BACKEND_UPSTREAM:http://k8s-orioneta-gateways-8aad0b07f9-df2508eb874d85a9.elb.us-east-1.amazonaws.com}
+		reverse_proxy {$BACKEND_UPSTREAM:http://host.docker.internal:8080}
 	}
 
 	handle {
-		reverse_proxy orioneta-frontend:80
+		reverse_proxy orioneta-public-frontend:80
 	}
 }
