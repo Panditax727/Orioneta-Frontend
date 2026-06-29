@@ -81,30 +81,6 @@ export function mergeOAuthProviders(apiProviders = []) {
   });
 }
 
-export function forgotPassword(email) {
-  return apiRequest("/api/auth/forgot-password", {
-    method: "POST",
-    body: { email },
-    auth: false,
-  });
-}
-
-export function verifyResetCode(email, code) {
-  return apiRequest("/api/auth/verify-reset-code", {
-    method: "POST",
-    body: { email, code },
-    auth: false,
-  });
-}
-
-export function resetPassword(data) {
-  return apiRequest("/api/auth/reset-password", {
-    method: "POST",
-    body: data,
-    auth: false,
-  });
-}
-
 export async function refreshTokens(refreshToken) {
   return apiRequest("/api/auth/refresh", {
     method: "POST",

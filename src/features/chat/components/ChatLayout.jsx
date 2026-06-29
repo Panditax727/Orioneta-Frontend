@@ -8,7 +8,6 @@ import {
   Store,
   Users,
   X,
-  Palette,
 } from "lucide-react";
 import ChatDetails from "./ChatDetails";
 import { useEffect, useRef, useState } from "react";
@@ -437,19 +436,11 @@ export default function ChatLayout() {
         />
 
         <NavIcon
-<<<<<<< HEAD
           active={activeSection === "studio"}
-=======
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
           onClick={() => navigate("/studio")}
           tooltip="Neta Studio"
           icon={<Palette size={20} />}
         />
-<<<<<<< HEAD
-=======
-
-        <div style={{ flex: 1 }} />
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
 
         <NavIcon
           active={activeSection === "settings"}

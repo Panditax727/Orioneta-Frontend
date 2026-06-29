@@ -292,8 +292,9 @@ describe('chatUtils', () => {
       expect(QUICK_EMOTES).toContain('✨');
     });
 
-    it('has RTC_CONFIGURATION with STUN servers', () => {
-      expect(RTC_CONFIGURATION.iceServers).toHaveLength(2);
+    it('has RTC_CONFIGURATION with STUN or TURN servers', () => {
+      expect(RTC_CONFIGURATION.iceServers.length).toBeGreaterThanOrEqual(2);
+      expect(RTC_CONFIGURATION.iceServers.some((server) => String(server.urls).startsWith('stun:'))).toBe(true);
     });
 
     it('has DEFAULT_VISUALS with all required keys', () => {

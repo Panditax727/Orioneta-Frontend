@@ -249,12 +249,6 @@ const ChatArea = forwardRef(function ChatArea({
     const latestKey = latestVisibleMessage ? `${latestVisibleMessage.id || latestVisibleMessage.createdAt || ""}:${latestVisibleMessage.content || ""}` : null;
     const previousKey = latestMessageKeyRef.current;
     const isNewMessage = Boolean(latestKey && previousKey && latestKey !== previousKey);
-<<<<<<< HEAD
-    if (latestKey) latestMessageKeyRef.current = latestKey;
-    if (!latestVisibleMessage) return;
-    const shouldScroll = shouldStickToBottomRef.current || latestVisibleMessage.mine || !previousKey;
-    if (shouldScroll) scrollMessagesToBottom(isNewMessage ? "smooth" : "auto");
-=======
 
     if (latestKey) {
       latestMessageKeyRef.current = latestKey;
@@ -273,21 +267,12 @@ const ChatArea = forwardRef(function ChatArea({
       scrollMessagesToBottom(isNewMessage ? "smooth" : "auto");
     }
 
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
     const pendingOutgoingDraft = pendingOutgoingDraftRef.current;
     if (pendingOutgoingDraft && latestVisibleMessage.mine && latestVisibleMessage.content === pendingOutgoingDraft.content) {
       pendingOutgoingDraftRef.current = null;
       setMessage((current) => current === pendingOutgoingDraft.draftText ? "" : current);
       setNotice("");
       shouldStickToBottomRef.current = true;
-<<<<<<< HEAD
-      scrollMessagesToBottom("smooth");
-      playFeedbackSound("send");
-      window.requestAnimationFrame(() => composerInputRef.current?.focus());
-    }
-    if (isNewMessage && !latestVisibleMessage.mine) playFeedbackSound("receive");
-  }, [latestVisibleMessage]);
-=======
       if (autoScrollEnabled) {
         scrollMessagesToBottom("smooth");
       }
@@ -303,7 +288,6 @@ const ChatArea = forwardRef(function ChatArea({
       playFeedbackSound("receive");
     }
   }, [autoScrollEnabled, latestVisibleMessage, soundFeedbackEnabled]);
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
 
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
@@ -353,11 +337,6 @@ const ChatArea = forwardRef(function ChatArea({
       setMessage("");
       setNotice("");
       shouldStickToBottomRef.current = true;
-<<<<<<< HEAD
-      scrollMessagesToBottom("smooth");
-      playFeedbackSound("send");
-      window.requestAnimationFrame(() => composerInputRef.current?.focus());
-=======
       if (autoScrollEnabled) {
         scrollMessagesToBottom("smooth");
       }
@@ -367,7 +346,6 @@ const ChatArea = forwardRef(function ChatArea({
       window.requestAnimationFrame(() => {
         composerInputRef.current?.focus();
       });
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
     } catch (err) {
       console.error("Error al enviar mensaje:", err);
       if (pendingOutgoingDraftRef.current === outgoingDraft) {
@@ -428,14 +406,7 @@ const ChatArea = forwardRef(function ChatArea({
       const offer = await peerConnection.createOffer();
       console.log("[WebRTC-Offer] Oferta creada, signalingState:", peerConnection.signalingState, "callId:", callId);
       await peerConnection.setLocalDescription(offer);
-<<<<<<< HEAD
       console.log("[WebRTC-Offer] SetLocalDescription OK, signalingState:", peerConnection.signalingState);
-      setCallSession({ callId, mode, status: "calling", direction: "outgoing", localStream: stream, remoteStream: null, muted: false, cameraOff: false, startedAt: new Date(), participantName: conversation.name });
-      pendingCallOfferRef.current = { callId, mode, offer };
-      await publishCallSignal("CALL_OFFER", { callId, mode, offer });
-      console.log("[WebRTC-Offer] CALL_OFFER publicado, esperando CALL_ANSWER...");
-      playFeedbackSound("call");
-=======
 
       setCallSession({
         callId,
@@ -450,6 +421,7 @@ const ChatArea = forwardRef(function ChatArea({
         participantName: conversation.name,
       });
 
+      pendingCallOfferRef.current = { callId, mode, offer };
       await publishCallSignal("CALL_OFFER", {
         callId,
         mode,
@@ -458,7 +430,6 @@ const ChatArea = forwardRef(function ChatArea({
       if (soundFeedbackEnabled) {
         playFeedbackSound("call");
       }
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
     } catch (callError) {
       const label = mode === "screen" ? "compartir pantalla" : "iniciar la llamada";
       console.error("[WebRTC-Offer] Error en startCall:", callError);
@@ -548,15 +519,9 @@ const ChatArea = forwardRef(function ChatArea({
         await publishCallSignal("CALL_DECLINED", { callId: payload.callId, reason: "busy" });
         return;
       }
-<<<<<<< HEAD
       onCloseSideProfile?.();
       console.log("[WebRTC-Signaling] Mostrando pantalla de llamada entrante (ringing)");
-      setCallSession({ callId: payload.callId, mode: payload.mode || "audio", status: "ringing", direction: "incoming", offer: payload.offer, localStream: null, remoteStream: null, muted: false, cameraOff: false, startedAt: null, participantName: conversation.name });
-      stopRingtone();
-      startRingtone();
-=======
 
-      setProfilePanelOpen(false);
       setCallSession({
         callId: payload.callId,
         mode: payload.mode || "audio",
@@ -571,9 +536,9 @@ const ChatArea = forwardRef(function ChatArea({
         participantName: conversation.name,
       });
       if (soundFeedbackEnabled) {
-        playFeedbackSound("call");
+        stopRingtone();
+        startRingtone();
       }
->>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
       return;
     }
     if (event.type === "CALL_ANSWER") {
