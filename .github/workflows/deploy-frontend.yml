@@ -36,6 +36,7 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=
             VITE_REALTIME_BASE_URL=
+            VITE_BUILD_ID=${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
