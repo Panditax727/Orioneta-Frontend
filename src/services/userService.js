@@ -56,7 +56,7 @@ export function normalizeUserProfile(profile) {
   }
 
   const session = getSession();
-  const profilePhotoReference = profile.profilePhoto || "";
+  const profilePhotoReference = profile.profilePhotoReference || profile.profilePhoto || "";
   const resolvedProfilePhoto = resolveProfilePhoto(profilePhotoReference);
   const isSessionProfile =
     session?.profileUserId &&
@@ -84,6 +84,15 @@ export async function findUserById(userId) {
 export async function findUserByEmail(email) {
   const query = new URLSearchParams({ email: normalizeEmail(email) });
   return normalizeUserProfile(await apiRequest(`/api/users/lookup?${query.toString()}`));
+}
+
+export async function findAllUsers() {
+  const users = await apiRequest("/api/users");
+  return (Array.isArray(users) ? users : []).map(normalizeUserProfile).filter(Boolean);
+}
+
+export async function findUserByUserName(userName) {
+  return normalizeUserProfile(await apiRequest(`/api/users/username/${encodeURIComponent(userName)}`));
 }
 
 export async function findUserByFriendCode(friendCode) {

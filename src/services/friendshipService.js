@@ -176,6 +176,13 @@ export async function cancelFriendRequest(requestId, requesterUserId) {
   });
 }
 
+export async function blockUser(blockerUserId, blockedUserId) {
+  return apiRequest("/api/friendships/block", {
+    method: "PATCH",
+    body: { blockerUserId, blockedUserId },
+  });
+}
+
 export async function removeFriend(userId, friendId) {
   return apiRequest(
     `/api/friendships/users/${userId}/friends/${friendId}/remove`,
