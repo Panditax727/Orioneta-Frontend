@@ -10,7 +10,6 @@ import ChatLayout from "./features/chat/components/ChatLayout";
 import ChannelsPage from "./features/channels/components/Channels";
 import PrivacyDataPage from "./features/legal/components/PrivacyDataPage";
 import { SettingsPage } from "./features/settings";
-import { ThemeMarket } from "./features/themes";
 import { MarketPage } from "./features/market";
 import { StudioPage } from "./features/studio";
 import ProfilePage from "./features/profile/ProfilePage";
@@ -57,7 +56,7 @@ function App() {
           path="/themes"
           element={
             <ProtectedRoute>
-              <ThemeMarket />
+              <MarketPage />
             </ProtectedRoute>
           }
         />

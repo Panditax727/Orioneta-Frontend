@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from "../../../services/apiClient";
+import { ApiError, apiRequest, resolveApiUrl } from "../../../services/apiClient";
 import { ensureCurrentUserProfile } from "../../../services/userService";
 import { getSession } from "../../auth/session";
 
@@ -182,6 +182,7 @@ function normalizeUserCustomization(customization, userId) {
     enabledMods: Array.isArray(customization?.enabledMods)
       ? customization.enabledMods
       : defaultUserCustomization(userId).enabledMods,
+    customTheme: customization?.customTheme || null,
   };
 }
 
@@ -277,6 +278,44 @@ function resolveBubbleStyleFromTemplate(template) {
   return "DEFAULT";
 }
 
+async function fetchTemplateFile(fileUrl) {
+  if (!fileUrl || fileUrl.startsWith("local://")) {
+    return null;
+  }
+
+  const session = getSession();
+  const headers = { Accept: "application/json" };
+
+  if (session?.accessToken) {
+    headers.Authorization = `${session.tokenType || "Bearer"} ${session.accessToken}`;
+  }
+
+  const response = await fetch(resolveApiUrl(fileUrl), { headers });
+
+  if (!response.ok) {
+    throw new ApiError("No se pudo leer el archivo del template", response.status);
+  }
+
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function buildCustomThemeFromStudioState(studioState, template) {
+  return {
+    id: `market-${template.id}`,
+    name: studioState.name || template.name,
+    accent: studioState.colors?.accent || "#7c3aed",
+    accentSecondary: studioState.colors?.accentSecondary || "#4f46e5",
+    incoming: studioState.colors?.incomingBubble || "#1a1b26",
+    background: studioState.colors?.background || "#0d0e14",
+  };
+}
+
 export function subscribeToCustomizationChanges(callback) {
   window.addEventListener(CUSTOMIZATION_UPDATED_EVENT, callback);
   return () => window.removeEventListener(CUSTOMIZATION_UPDATED_EVENT, callback);
@@ -284,6 +323,17 @@ export function subscribeToCustomizationChanges(callback) {
 
 export function getThemePreset(themeId) {
   return GLOBAL_THEME_PRESETS.find((theme) => theme.id === themeId) || GLOBAL_THEME_PRESETS[0];
+}
+
+function getActiveGlobalTheme(userCustomization) {
+  if (
+    userCustomization?.customTheme &&
+    userCustomization.customTheme.id === userCustomization.activeGlobalThemeId
+  ) {
+    return userCustomization.customTheme;
+  }
+
+  return getThemePreset(userCustomization?.activeGlobalThemeId);
 }
 
 export function getChatThemePreset(themeId) {
@@ -295,7 +345,7 @@ export function getFontPreset(fontId) {
 }
 
 export function getCustomizationVisuals(userCustomization, conversationCustomization) {
-  const globalTheme = getThemePreset(userCustomization?.activeGlobalThemeId);
+  const globalTheme = getActiveGlobalTheme(userCustomization);
   const chatTheme = getChatThemePreset(
     conversationCustomization?.activeBackgroundId
       || conversationCustomization?.activeChatThemeId,
@@ -448,12 +498,30 @@ export const customizationService = {
   },
 
   downloadTemplate: async (templateId) => withApiFallback(
-    () => apiRequest(`/api/neta-market/templates/${templateId}/download`, { method: "POST" }),
+    async () => {
+      const template = await apiRequest(`/api/neta-market/templates/${templateId}/download`, { method: "POST" });
+      const studioState = await fetchTemplateFile(template.fileUrl);
+
+      return studioState ? { ...template, studioState } : template;
+    },
     () => FALLBACK_TEMPLATES.find((template) => template.id === templateId) || null,
   ),
 
   applyTemplate: async (template, conversationId = null) => {
-    await customizationService.downloadTemplate(template.id);
+    const downloadedTemplate = await customizationService.downloadTemplate(template.id);
+    const studioState = downloadedTemplate?.studioState;
+
+    if (template.type === "GLOBAL_THEME" && studioState?.colors) {
+      const customTheme = buildCustomThemeFromStudioState(studioState, template);
+
+      return customizationService.updateUserCustomization({
+        activeGlobalThemeId: customTheme.id,
+        customTheme,
+        activeFontId: studioState.font?.family?.includes("mono") ? "mono" : "inter",
+        animationLevel: Number(studioState.animations?.level ?? 3),
+        compactMode: studioState.bubbles?.style === "COMPACT",
+      });
+    }
 
     if (template.type === "GLOBAL_THEME") {
       return customizationService.updateUserCustomization({

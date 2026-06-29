@@ -11,6 +11,7 @@ export function useStudio() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -18,6 +19,7 @@ export function useStudio() {
     const init = async () => {
       try {
         setLoading(true);
+        setLoadError("");
         const [current, themes, market, featured] = await Promise.all([
           studioService.loadCurrentSettings(),
           studioService.getSavedThemes(),
@@ -28,8 +30,8 @@ export function useStudio() {
         setSavedThemes(themes);
         setMarketTemplates(market);
         setFeaturedTemplates(featured);
-      } catch {
-        // use defaults
+      } catch (error) {
+        setLoadError(error.message || "No se pudo cargar Neta Studio");
       } finally {
         setLoading(false);
       }
@@ -169,6 +171,7 @@ export function useStudio() {
     marketTemplates,
     featuredTemplates,
     loading,
+    loadError,
     saving,
     publishing,
     message,

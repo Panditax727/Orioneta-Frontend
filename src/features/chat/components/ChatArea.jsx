@@ -118,6 +118,8 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
   const quickEmotesEnabled = enabledMods.has("quick-emotes");
   const ambientChatEnabled = enabledMods.has("ambient-chat");
   const callStudioEnabled = enabledMods.has("call-studio");
+  const soundFeedbackEnabled = !enabledMods.has("sound-feedback-off");
+  const autoScrollEnabled = !enabledMods.has("auto-scroll-off");
 
   useEffect(() => {
     callSessionRef.current = callSession;
@@ -242,7 +244,7 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       latestVisibleMessage.mine ||
       !previousKey;
 
-    if (shouldScroll) {
+    if (autoScrollEnabled && shouldScroll) {
       scrollMessagesToBottom(isNewMessage ? "smooth" : "auto");
     }
 
@@ -259,17 +261,21 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       );
       setNotice("");
       shouldStickToBottomRef.current = true;
-      scrollMessagesToBottom("smooth");
-      playFeedbackSound("send");
+      if (autoScrollEnabled) {
+        scrollMessagesToBottom("smooth");
+      }
+      if (soundFeedbackEnabled) {
+        playFeedbackSound("send");
+      }
       window.requestAnimationFrame(() => {
         composerInputRef.current?.focus();
       });
     }
 
-    if (isNewMessage && !latestVisibleMessage.mine) {
+    if (soundFeedbackEnabled && isNewMessage && !latestVisibleMessage.mine) {
       playFeedbackSound("receive");
     }
-  }, [latestVisibleMessage]);
+  }, [autoScrollEnabled, latestVisibleMessage, soundFeedbackEnabled]);
 
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
@@ -366,8 +372,12 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
       setMessage("");
       setNotice("");
       shouldStickToBottomRef.current = true;
-      scrollMessagesToBottom("smooth");
-      playFeedbackSound("send");
+      if (autoScrollEnabled) {
+        scrollMessagesToBottom("smooth");
+      }
+      if (soundFeedbackEnabled) {
+        playFeedbackSound("send");
+      }
       window.requestAnimationFrame(() => {
         composerInputRef.current?.focus();
       });
@@ -523,7 +533,9 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         mode,
         offer,
       });
-      playFeedbackSound("call");
+      if (soundFeedbackEnabled) {
+        playFeedbackSound("call");
+      }
     } catch (callError) {
       const label =
         mode === "screen" ? "compartir pantalla" : "iniciar la llamada";
@@ -685,7 +697,9 @@ export default function ChatArea({ conversation, isMobile, onBack }) {
         startedAt: null,
         participantName: conversation.name,
       });
-      playFeedbackSound("call");
+      if (soundFeedbackEnabled) {
+        playFeedbackSound("call");
+      }
       return;
     }
 

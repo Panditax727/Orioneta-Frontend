@@ -31,13 +31,25 @@ import { copyToClipboard } from "../../../shared/utils/helpers";
 import {
   removeLocalProfilePhoto,
   resolveProfilePhoto,
-  storeLocalProfilePhoto,
+  uploadProfilePhoto,
 } from "../../../services/profilePhotoService";
 
 const VISIBILITY_OPTIONS = [
   { value: "PUBLIC", label: "Publica" },
   { value: "PRIVATE", label: "Privada" },
 ];
+
+const BETA_PRIVACY_KEY = "orioneta.beta.privacy";
+
+const DEFAULT_BETA_PRIVACY_PREFS = {
+  diagnostics: true,
+  usageNotes: true,
+  contactForFeedback: true,
+  showProfileInSearch: true,
+  allowMessageAttachments: true,
+  dataRetentionAcknowledged: true,
+  updatedAt: null,
+};
 
 const SETTING_SECTIONS = [
   { id: "profile", label: "Perfil", icon: UserRound },
@@ -60,14 +72,38 @@ function buildForm(profile) {
   };
 }
 
+function betaPrivacyStorageKey(userId = "anonymous") {
+  return `${BETA_PRIVACY_KEY}.${userId || "anonymous"}`;
+}
+
+function readBetaPrivacyPrefs(userId = "anonymous") {
+  try {
+    const stored = localStorage.getItem(betaPrivacyStorageKey(userId));
+    return stored
+      ? { ...DEFAULT_BETA_PRIVACY_PREFS, ...JSON.parse(stored) }
+      : DEFAULT_BETA_PRIVACY_PREFS;
+  } catch {
+    return DEFAULT_BETA_PRIVACY_PREFS;
+  }
+}
+
+function writeBetaPrivacyPrefs(userId = "anonymous", prefs) {
+  localStorage.setItem(
+    betaPrivacyStorageKey(userId),
+    JSON.stringify({ ...DEFAULT_BETA_PRIVACY_PREFS, ...prefs }),
+  );
+}
+
 export default function SettingsPanel({ selectedConversation, style, onLogout }) {
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(() => buildForm(null));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [privacyPrefs, setPrivacyPrefs] = useState(() => readBetaPrivacyPrefs());
   const conversationId = selectedConversation?.backend ? selectedConversation.id : null;
   const {
     userCustomization,
@@ -91,6 +127,7 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
         if (mounted) {
           setProfile(nextProfile);
           setForm(buildForm(nextProfile));
+          setPrivacyPrefs(readBetaPrivacyPrefs(nextProfile.userID));
         }
       } catch (loadError) {
         if (mounted) {
@@ -142,7 +179,8 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
       setError("");
       setNotice("");
 
-      const storedPhoto = await storeLocalProfilePhoto(profile.userID, file);
+      setUploadingPhoto(true);
+      const storedPhoto = await uploadProfilePhoto(profile.userID, file);
 
       setForm((current) => {
         removeLocalProfilePhoto(current.profilePhoto);
@@ -153,9 +191,11 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
           profilePhotoPreview: storedPhoto.previewUrl,
         };
       });
-      setNotice("Foto lista para guardar");
+      setNotice("Foto subida. Guarda el perfil para publicarla");
     } catch (photoError) {
-      setError(photoError.message || "No se pudo preparar la imagen");
+      setError(photoError.message || "No se pudo subir la imagen");
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -220,6 +260,44 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
     }
   };
 
+  const updatePrivacyPrefs = (updates) => {
+    const nextPrefs = {
+      ...privacyPrefs,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPrivacyPrefs(nextPrefs);
+    writeBetaPrivacyPrefs(profile?.userID, nextPrefs);
+    setError("");
+    setNotice("Preferencias de beta actualizadas");
+  };
+
+  const exportPrivacySnapshot = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      profile: {
+        displayName: profile?.name,
+        userName: profile?.userName,
+        email: profile?.email,
+        friendCode: profile?.friendCode,
+        visibility: form.visibility,
+      },
+      betaPrivacy: privacyPrefs,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = "orioneta-datos-beta.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice("Archivo de datos preparado");
+  };
+
   const updateConversationAppearance = async (updates, message) => {
     try {
       setError("");
@@ -281,7 +359,8 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
               avatar={avatar}
               form={form}
               loading={loading}
-              saving={saving}
+              saving={saving || uploadingPhoto}
+              uploadingPhoto={uploadingPhoto}
               dirty={dirty}
               updateField={updateField}
               onFileChange={handleProfilePhotoFile}
@@ -300,7 +379,10 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
               loading={loading}
               saving={saving}
               dirty={dirty}
+              privacyPrefs={privacyPrefs}
               updateField={updateField}
+              updatePrivacyPrefs={updatePrivacyPrefs}
+              onExportPrivacySnapshot={exportPrivacySnapshot}
               onSave={handleSave}
             />
           )}
@@ -348,7 +430,7 @@ function SectionButton({ section, active, onClick }) {
   );
 }
 
-function ProfileSection({ avatar, form, loading, saving, dirty, updateField, onFileChange, onRemovePhoto, onSave }) {
+function ProfileSection({ avatar, form, loading, saving, uploadingPhoto, dirty, updateField, onFileChange, onRemovePhoto, onSave }) {
   return (
     <form onSubmit={onSave}>
       <SectionHeader title="Perfil" subtitle="Tu identidad publica dentro de Orioneta." />
@@ -360,7 +442,7 @@ function ProfileSection({ avatar, form, loading, saving, dirty, updateField, onF
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <label style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#c0caf5", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 12px", fontSize: 12, fontWeight: 700, cursor: loading || saving ? "not-allowed" : "pointer", opacity: loading || saving ? 0.6 : 1 }}>
             <ImagePlus size={15} />
-            Elegir imagen
+            {uploadingPhoto ? "Subiendo..." : "Elegir imagen"}
             <input
               type="file"
               accept="image/*"
@@ -440,20 +522,31 @@ function AccountSection({ profile, onCopyFriendCode }) {
   );
 }
 
-function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
+function PrivacySection({
+  form,
+  loading,
+  saving,
+  dirty,
+  privacyPrefs,
+  updateField,
+  updatePrivacyPrefs,
+  onExportPrivacySnapshot,
+  onSave,
+}) {
   return (
     <form onSubmit={onSave}>
-      <SectionHeader title="Privacidad" subtitle="Controla como aparece tu cuenta para otros usuarios." />
+      <SectionHeader title="Privacidad" subtitle="Controles para beta cerrada y visibilidad de cuenta." />
       <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
         <PrivacyInfoCard
-          title="Tu friend code es publico si lo compartes"
-          text="Sirve para que otras personas te encuentren sin mostrar datos largos o dificiles de recordar."
+          title="Beta cerrada"
+          text="Orioneta esta en una fase limitada. Registramos lo necesario para operar cuentas, amistades, chats, archivos y diagnosticar fallos reportados por testers."
         />
         <PrivacyInfoCard
-          title="Tu perfil puede ser mas reservado"
-          text="La visibilidad controla cuanto aparece tu cuenta cuando otros usuarios te buscan."
+          title="Sin uso publicitario"
+          text="Los mensajes y archivos no se usan para publicidad externa. Los datos tecnicos se revisan para estabilidad, seguridad y soporte."
         />
       </div>
+
       <Field label="Visibilidad de cuenta">
         <select
           value={form.visibility}
@@ -468,6 +561,56 @@ function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
           ))}
         </select>
       </Field>
+
+      <SectionTitle icon={<Shield size={15} />} title="Datos de beta" />
+
+      <PreferenceRow
+        label="Diagnostico tecnico"
+        text="Permite usar errores, eventos de conexion y salud de servicios para corregir fallos."
+        checked={privacyPrefs.diagnostics}
+        onChange={() => updatePrivacyPrefs({ diagnostics: !privacyPrefs.diagnostics })}
+      />
+      <PreferenceRow
+        label="Notas de uso"
+        text="Permite considerar acciones generales de la interfaz para decidir que mejorar primero."
+        checked={privacyPrefs.usageNotes}
+        onChange={() => updatePrivacyPrefs({ usageNotes: !privacyPrefs.usageNotes })}
+      />
+      <PreferenceRow
+        label="Contacto para feedback"
+        text="Autoriza que el equipo contacte esta cuenta si necesita contexto sobre un error reportado."
+        checked={privacyPrefs.contactForFeedback}
+        onChange={() => updatePrivacyPrefs({ contactForFeedback: !privacyPrefs.contactForFeedback })}
+      />
+      <PreferenceRow
+        label="Aparecer en busqueda"
+        text="Permite que otros testers te encuentren por correo o friend code."
+        checked={privacyPrefs.showProfileInSearch}
+        onChange={() => updatePrivacyPrefs({ showProfileInSearch: !privacyPrefs.showProfileInSearch })}
+      />
+      <PreferenceRow
+        label="Adjuntos en conversaciones"
+        text="Permite subir imagenes y archivos vinculados a tu cuenta mediante media-service."
+        checked={privacyPrefs.allowMessageAttachments}
+        onChange={() => updatePrivacyPrefs({ allowMessageAttachments: !privacyPrefs.allowMessageAttachments })}
+      />
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <button
+          type="button"
+          onClick={onExportPrivacySnapshot}
+          style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#c0caf5", padding: "0 12px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}
+        >
+          Exportar resumen de datos
+        </button>
+        <a
+          href="mailto:orioneta.noreply@gmail.com?subject=Privacidad%20Orioneta%20Beta"
+          style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#10111a", color: "#a78bfa", display: "inline-flex", alignItems: "center", padding: "0 12px", textDecoration: "none", fontSize: 12, fontWeight: 800 }}
+        >
+          Contactar privacidad
+        </a>
+      </div>
+
       <a
         href="/privacidad"
         target="_blank"
@@ -479,6 +622,22 @@ function PrivacySection({ form, loading, saving, dirty, updateField, onSave }) {
       </a>
       <SaveButton dirty={dirty} saving={saving} loading={loading} />
     </form>
+  );
+}
+
+function PreferenceRow({ label, text, checked, onChange }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, padding: "12px 0", borderBottom: "1px solid #1e2030" }}>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: "block", color: "#c0caf5", fontSize: 13, fontWeight: 800 }}>
+          {label}
+        </span>
+        <span style={{ display: "block", color: "#565f89", fontSize: 12, lineHeight: 1.45, marginTop: 3 }}>
+          {text}
+        </span>
+      </span>
+      <Toggle checked={checked} onChange={onChange} />
+    </div>
   );
 }
 
@@ -654,9 +813,16 @@ function MediaSection({ userCustomization, onUpdate }) {
     (window.isSecureContext || window.location.hostname === "localhost");
   const enabledMods = userCustomization?.enabledMods || [];
   const callStudioEnabled = enabledMods.includes("call-studio");
-  const nextMods = callStudioEnabled
-    ? enabledMods.filter((modId) => modId !== "call-studio")
-    : [...enabledMods, "call-studio"];
+  const soundFeedbackEnabled = !enabledMods.includes("sound-feedback-off");
+  const autoScrollEnabled = !enabledMods.includes("auto-scroll-off");
+
+  const toggleMod = (modId, enabled) => {
+    const nextMods = enabled
+      ? enabledMods.filter((currentModId) => currentModId !== modId)
+      : [...enabledMods, modId];
+
+    return nextMods;
+  };
 
   return (
     <section>
@@ -702,7 +868,38 @@ function MediaSection({ userCustomization, onUpdate }) {
         <Toggle
           checked={callStudioEnabled}
           onChange={() =>
-            onUpdate({ enabledMods: nextMods }, "Llamadas actualizadas")
+            onUpdate(
+              {
+                enabledMods: callStudioEnabled
+                  ? enabledMods.filter((modId) => modId !== "call-studio")
+                  : [...enabledMods, "call-studio"],
+              },
+              "Llamadas actualizadas",
+            )
+          }
+        />
+      </SettingRow>
+
+      <SettingRow label="Sonidos de feedback">
+        <Toggle
+          checked={soundFeedbackEnabled}
+          onChange={() =>
+            onUpdate(
+              { enabledMods: toggleMod("sound-feedback-off", soundFeedbackEnabled) },
+              "Sonidos actualizados",
+            )
+          }
+        />
+      </SettingRow>
+
+      <SettingRow label="Mantener chat al final">
+        <Toggle
+          checked={autoScrollEnabled}
+          onChange={() =>
+            onUpdate(
+              { enabledMods: toggleMod("auto-scroll-off", autoScrollEnabled) },
+              "Desplazamiento actualizado",
+            )
           }
         />
       </SettingRow>
@@ -714,10 +911,9 @@ function MediaSection({ userCustomization, onUpdate }) {
             Archivos compatibles
           </p>
           <p style={{ color: "#565f89", fontSize: 12, lineHeight: 1.45, margin: 0 }}>
-            Imagenes, videos, audios y documentos livianos hasta 12 MB. Para
-            archivos grandes, el siguiente paso natural es mover adjuntos a
-            almacenamiento externo como MinIO/S3 y guardar solo la URL en el
-            mensaje.
+            Imagenes, videos, audios y documentos livianos hasta 12 MB. Los
+            archivos se suben por media-service, se guardan en MinIO y el chat
+            conserva la URL publica segura para que otros usuarios puedan verlos.
           </p>
         </div>
       </div>

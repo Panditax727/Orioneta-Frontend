@@ -1,3 +1,5 @@
+import { uploadMediaFile } from "./mediaService";
+
 const LOCAL_PROFILE_PHOTO_PREFIX = "local-avatar:";
 const PROFILE_PHOTO_STORAGE_KEY = "orioneta.profile-photo";
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
@@ -20,18 +22,29 @@ export function resolveProfilePhoto(reference) {
   return localStorage.getItem(storageKey(reference)) || "";
 }
 
+export async function uploadProfilePhoto(userId, file) {
+  validateProfilePhoto(file);
+
+  const optimizedFile = await resizeImageFileToJpeg(file);
+  const uploaded = await uploadMediaFile({
+    ownerUserId: userId,
+    file: optimizedFile,
+    purpose: "AVATAR",
+  });
+
+  if (!uploaded?.url) {
+    throw new Error("El servicio de archivos no devolvio una URL publica");
+  }
+
+  return {
+    reference: uploaded.url,
+    previewUrl: uploaded.url,
+    media: uploaded,
+  };
+}
+
 export async function storeLocalProfilePhoto(userId, file) {
-  if (!file) {
-    throw new Error("Selecciona una imagen");
-  }
-
-  if (!file.type.startsWith("image/")) {
-    throw new Error("El archivo debe ser una imagen");
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error("La imagen no puede superar los 8 MB");
-  }
+  validateProfilePhoto(file);
 
   const previewUrl = await resizeImageFile(file);
   const reference = `${LOCAL_PROFILE_PHOTO_PREFIX}${userId}:${Date.now()}`;
@@ -52,6 +65,20 @@ export function removeLocalProfilePhoto(reference) {
 
 function storageKey(reference) {
   return `${PROFILE_PHOTO_STORAGE_KEY}.${reference}`;
+}
+
+function validateProfilePhoto(file) {
+  if (!file) {
+    throw new Error("Selecciona una imagen");
+  }
+
+  if (!file.type.startsWith("image/")) {
+    throw new Error("El archivo debe ser una imagen");
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error("La imagen no puede superar los 8 MB");
+  }
 }
 
 function resizeImageFile(file) {
@@ -80,6 +107,58 @@ function resizeImageFile(file) {
     reader.onerror = () => reject(new Error("No se pudo abrir el archivo"));
     reader.readAsDataURL(file);
   });
+}
+
+function resizeImageFileToJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const { width, height } = getTargetSize(image.width, image.height);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        canvas.width = width;
+        canvas.height = height;
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("No se pudo preparar la imagen"));
+              return;
+            }
+
+            const fileName = buildOptimizedFileName(file.name);
+            resolve(new File([blob], fileName, { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          JPEG_QUALITY,
+        );
+      };
+
+      image.onerror = () => reject(new Error("No se pudo leer la imagen"));
+      image.src = reader.result;
+    };
+
+    reader.onerror = () => reject(new Error("No se pudo abrir el archivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildOptimizedFileName(fileName = "avatar") {
+  const baseName = fileName
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "avatar";
+
+  return `${baseName}.jpg`;
 }
 
 function getTargetSize(width, height) {

@@ -3,6 +3,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Palette,
   Search,
   Settings,
   Store,
@@ -294,6 +295,12 @@ export default function ChatLayout() {
           onClick={() => handleSectionChange("neta-market")}
           tooltip="Neta Market"
           icon={<Store size={20} />}
+        />
+
+        <NavIcon
+          onClick={() => navigate("/studio")}
+          tooltip="Neta Studio"
+          icon={<Palette size={20} />}
         />
 
         <div style={{ flex: 1 }} />

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Search, Sparkles, Store } from "lucide-react";
+import { Download, Palette, Search, Sparkles, Store } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { customizationService } from "../services/customizationService";
 
 const TEMPLATE_TYPES = [
@@ -25,6 +26,7 @@ const TYPE_LABELS = {
 };
 
 export default function NetaMarketPanel({ selectedConversation, style }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
   const [templates, setTemplates] = useState([]);
@@ -157,6 +159,15 @@ export default function NetaMarketPanel({ selectedConversation, style }) {
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={() => navigate("/studio")}
+          style={{ width: "100%", height: 36, marginTop: 12, borderRadius: 8, border: "1px solid rgba(167, 139, 250, 0.3)", background: "rgba(124, 58, 237, 0.12)", color: "#c4b5fd", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", fontSize: 12, fontWeight: 800 }}
+        >
+          <Palette size={14} />
+          Crear tema en Neta Studio
+        </button>
       </div>
 
       {(notice || error) && (

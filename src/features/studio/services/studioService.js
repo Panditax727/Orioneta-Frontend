@@ -95,6 +95,7 @@ export const studioService = {
 
     return customizationService.updateUserCustomization({
       activeGlobalThemeId: themeId,
+      customTheme,
       activeFontId: studioState.font.family.includes("mono") ? "mono" : "inter",
       animationLevel: studioState.animations.level,
       compactMode: studioState.bubbles.style === "COMPACT",

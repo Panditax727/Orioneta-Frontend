@@ -17,7 +17,7 @@ const BUBBLE_OPTIONS = [
 export default function StudioPage() {
   const navigate = useNavigate();
   const {
-    state, savedThemes, marketTemplates, featuredTemplates, loading, saving, publishing, message, visuals, fileInputRef,
+    state, savedThemes, marketTemplates, featuredTemplates, loading, loadError, saving, publishing, message, visuals, fileInputRef,
     updateColors, updateFont, updateBubbles, updateAnimations, updateName,
     handleSave, handleExport, handleImport, handleLoadTheme, handleDeleteTheme, handleReset,
     handlePublishToMarket, handleDownloadFromMarket,
@@ -55,7 +55,7 @@ export default function StudioPage() {
             </button>
             <h1 style={{ color: "#c0caf5", fontSize: 16, fontWeight: 600, margin: 0 }}>Neta Studio</h1>
           </div>
-          <p style={{ color: "#565f89", fontSize: 11, margin: 0 }}>Editor visual de temas</p>
+          <p style={{ color: "#565f89", fontSize: 11, margin: 0 }}>Editor visual para beta cerrada</p>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
@@ -223,6 +223,20 @@ export default function StudioPage() {
       {/* Main: Preview + Saved Themes */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Message */}
+        {loadError && (
+          <div style={{
+            padding: "10px 16px",
+            background: "rgba(239,68,68,0.1)",
+            borderBottom: "1px solid #ef4444",
+            display: "flex", alignItems: "center", gap: 8,
+            color: "#ef4444",
+            fontSize: 13,
+          }}>
+            <XCircle size={16} />
+            {loadError}. Puedes seguir editando con valores locales.
+          </div>
+        )}
+
         {message && (
           <div style={{
             padding: "10px 16px",
