@@ -30,7 +30,7 @@ export default function VerifyCode() {
       setMessage("Código verificado correctamente");
       setTimeout(() => navigate("/reset-password", { state: { email, code } }), 1000);
     } catch (err) {
-      setError(err.response?.data?.message || "Código inválido o expirado. Por favor, intenta nuevamente.");
+      setError(err.message || "Código inválido o expirado. Por favor, intenta nuevamente.");
     } finally {
       setLoading(false);
     }

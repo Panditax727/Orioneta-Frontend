@@ -126,8 +126,7 @@ export function useStudio() {
         return;
       }
 
-      const templateData = netaMarketService.studioStateToTemplate(state, userId);
-      const created = await netaMarketService.createTemplate(templateData);
+      await netaMarketService.createTemplateFromStudio(state, userId);
 
       // Refresh market templates
       const [market, featured] = await Promise.all([

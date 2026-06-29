@@ -31,6 +31,30 @@ export function register(account) {
   });
 }
 
+export function forgotPassword(email) {
+  return apiRequest("/api/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+    auth: false,
+  });
+}
+
+export function verifyResetCode(email, code) {
+  return apiRequest("/api/auth/verify-reset-code", {
+    method: "POST",
+    body: { email, code },
+    auth: false,
+  });
+}
+
+export function resetPassword({ email, token, newPassword }) {
+  return apiRequest("/api/auth/reset-password", {
+    method: "POST",
+    body: { email, token, newPassword },
+    auth: false,
+  });
+}
+
 export function getOAuthProviders() {
   return apiRequest("/api/auth/oauth2/providers", { auth: false });
 }

@@ -1,4 +1,5 @@
-import { apiRequest } from "../../../services/apiClient";
+import { getSession } from "../../auth/session";
+import { ApiError, apiRequest, resolveApiUrl } from "../../../services/apiClient";
 
 const NETA_MARKET_BASE = "/api/neta-market";
 
@@ -25,10 +26,37 @@ export const netaMarketService = {
    * Create a new template
    */
   async createTemplate(templateData) {
+    if (templateData instanceof FormData) {
+      return sendMultipartTemplate(templateData);
+    }
+
     return apiRequest(`${NETA_MARKET_BASE}/templates`, {
       method: "POST",
       body: templateData,
     });
+  },
+
+  /**
+   * Publish a Studio theme as a real file upload.
+   */
+  async createTemplateFromStudio(studioState, authorUserId) {
+    const fileName = `${slugify(studioState.name || "tema-orioneta")}.orioneta-theme.json`;
+    const themeFile = new Blob([JSON.stringify(studioState, null, 2)], {
+      type: "application/json",
+    });
+    const formData = new FormData();
+
+    formData.append("authorUserId", authorUserId);
+    formData.append("name", studioState.name || "Tema Orioneta");
+    formData.append(
+      "description",
+      `Tema visual personalizado: ${studioState.name || "Tema Orioneta"}`,
+    );
+    formData.append("type", "GLOBAL_THEME");
+    formData.append("version", studioState.version || "1.0.0");
+    formData.append("file", themeFile, fileName);
+
+    return sendMultipartTemplate(formData);
   },
 
   /**
@@ -92,3 +120,50 @@ export const netaMarketService = {
     };
   },
 };
+
+async function sendMultipartTemplate(formData) {
+  const session = getSession();
+  const headers = {};
+
+  if (session?.accessToken) {
+    headers.Authorization = `${session.tokenType || "Bearer"} ${session.accessToken}`;
+  }
+
+  let response;
+
+  try {
+    response = await fetch(resolveApiUrl(`${NETA_MARKET_BASE}/templates`), {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+  } catch (error) {
+    throw new ApiError("No pudimos conectar con Neta Market", 0, error);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message =
+      typeof data === "object" && data !== null
+        ? data.message || data.error || "No se pudo publicar el tema"
+        : data || "No se pudo publicar el tema";
+
+    throw new ApiError(message, response.status, data);
+  }
+
+  return data;
+}
+
+function slugify(value) {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "tema-orioneta";
+}
