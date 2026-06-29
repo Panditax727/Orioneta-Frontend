@@ -9,6 +9,7 @@ import { publishRealtimeEvent } from "../../realtime/services/realtimeService";
 import { getProfileBadges } from "../../status/utils/profileBadges";
 
 const CHAT_STORAGE_KEY = "orioneta.chat.local-state";
+const GROUP_META_STORAGE_KEY = "orioneta.chat.group-meta";
 const CHAT_UPDATED_EVENT = "orioneta-chat-updated";
 const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
 
@@ -146,6 +147,77 @@ function readState() {
 
 function writeState(state) {
   localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(state));
+}
+
+function readGroupMetaStore() {
+  try {
+    return JSON.parse(localStorage.getItem(GROUP_META_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeGroupMeta(conversationId, updates = {}) {
+  const store = readGroupMetaStore();
+  const key = String(conversationId);
+
+  store[key] = {
+    ...(store[key] || {}),
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem(GROUP_META_STORAGE_KEY, JSON.stringify(store));
+}
+
+function applyGroupMeta(conversation) {
+  if (!conversation?.isGroup) {
+    return conversation;
+  }
+
+  const meta = readGroupMetaStore()[String(conversation.id)];
+
+  if (!meta) {
+    return conversation;
+  }
+
+  return {
+    ...conversation,
+    ...(meta.name ? { name: meta.name } : {}),
+    ...(meta.avatarPhoto ? { avatarPhoto: meta.avatarPhoto, avatarUrl: meta.avatarPhoto } : {}),
+    ...(meta.bio !== undefined ? { bio: meta.bio, description: meta.description || meta.bio } : {}),
+    ...(meta.ownerId ? { ownerId: meta.ownerId } : {}),
+  };
+}
+
+function resolveGroupOwnerId(conversation, members = []) {
+  if (conversation.ownerId) {
+    return conversation.ownerId;
+  }
+
+  if (conversation.owner?.id || conversation.owner?.userId) {
+    return conversation.owner.id || conversation.owner.userId;
+  }
+
+  if (conversation.createdBy) {
+    return conversation.createdBy;
+  }
+
+  const ownerParticipant = (conversation.participants || []).find((participant) => {
+    const role = String(participant.role || participant.participantRole || "").toUpperCase();
+    return role === "OWNER" || role === "ADMIN";
+  });
+
+  if (ownerParticipant) {
+    return getParticipantUserId(ownerParticipant);
+  }
+
+  const ownerMember = members.find((member) => {
+    const role = String(member.role || "").toUpperCase();
+    return role === "OWNER" || role === "ADMIN";
+  });
+
+  return ownerMember?.id || ownerMember?.userId || null;
 }
 
 function notifyChatUpdated() {
@@ -386,6 +458,77 @@ function getParticipantUserId(participant) {
   return participant?.userId || participant?.userID || participant?.id || null;
 }
 
+function buildMemberFromParticipant(participant, currentUserId) {
+  const userId = getParticipantUserId(participant);
+
+  if (!userId || String(userId) === String(participant?.conversationId)) {
+    return null;
+  }
+
+  const user = participant.user || participant.profile || participant;
+  const participantType = String(participant.type || user.type || "").toUpperCase();
+
+  if (participantType === "GROUP" || participantType === "GROUP_CHAT") {
+    return null;
+  }
+
+  const name = String(userId) === String(currentUserId)
+    ? "Tu"
+    : getDisplayName(user);
+
+  const role = String(
+    participant.role || participant.participantRole || user.role || "",
+  ).toUpperCase();
+
+  return {
+    id: userId,
+    userId,
+    name,
+    avatar: getAvatar(user || name),
+    avatarPhoto: getProfilePhoto(user),
+    online: user?.status === "ONLINE",
+    role: role || "MEMBER",
+  };
+}
+
+async function buildMembersFromParticipants(participants, currentUserId, conversationId) {
+  const members = (participants || [])
+    .map((participant) => buildMemberFromParticipant(participant, currentUserId))
+    .filter(Boolean);
+
+  const uniqueMembers = new Map();
+
+  members.forEach((member) => {
+    if (String(member.id) === String(conversationId)) {
+      return;
+    }
+
+    uniqueMembers.set(String(member.id), member);
+  });
+
+  const resolvedMembers = await Promise.all(
+    [...uniqueMembers.values()].map(async (member) => {
+      if (member.name !== "Tu" && member.name.startsWith("Usuario")) {
+        const user = await findUserCached(member.id);
+
+        if (user) {
+          return {
+            ...member,
+            name: getDisplayName(user),
+            avatar: getAvatar(user),
+            avatarPhoto: getProfilePhoto(user),
+            online: user?.status === "ONLINE",
+          };
+        }
+      }
+
+      return member;
+    }),
+  );
+
+  return resolvedMembers;
+}
+
 function getParticipantIds(conversation) {
   if (Array.isArray(conversation.participantIds)) {
     return conversation.participantIds.filter(Boolean);
@@ -493,13 +636,14 @@ async function normalizeBackendMessage(
     conversationId: message.conversationId,
     senderId: message.senderId,
     sender: senderName,
-    senderAvatarPhoto: getProfilePhoto(sender),
+    senderAvatarPhoto: mine ? getProfilePhoto(currentProfile) : getProfilePhoto(sender),
     senderInitial: getAvatar(sender || senderName),
     content: message.content,
     type: message.type,
     status: message.status,
     time: formatMessageTime(message.createdAt),
     mine,
+    edited: Boolean(message.edited),
     createdAt: message.createdAt,
   };
 }
@@ -525,27 +669,39 @@ async function normalizeBackendConversation(
     throw new ApiError("No se pudo identificar al usuario actual", 0);
   }
 
-  const otherParticipantId = getOtherParticipantId(conversation, currentUserId);
-  const otherParticipant = await findUserCached(otherParticipantId);
+  const isGroup = conversation.type === "GROUP_CHAT" || conversation.type === "GROUP";
+  const otherParticipantId = isGroup ? null : getOtherParticipantId(conversation, currentUserId);
+  const otherParticipant = isGroup ? null : await findUserCached(otherParticipantId);
   const rawMessages = sortRawMessages(messages || []);
   const lastMessage = rawMessages.at(-1);
   const lastActivityAt = getConversationActivityAt(conversation, rawMessages);
-  const fallbackName =
-    conversation.type === "PRIVATE_CHAT" ? "Chat privado" : "Grupo";
-  const name =
-    conversation.name?.trim() ||
-    getDisplayName(otherParticipant) ||
-    fallbackName;
+  const name = isGroup
+    ? (conversation.name?.trim() || "Grupo")
+    : (conversation.name?.trim() || getDisplayName(otherParticipant) || "Chat privado");
   const status = otherParticipant?.status;
 
-  return {
+  const members = isGroup
+    ? await buildMembersFromParticipants(
+        conversation.participants || conversation.members || [],
+        currentUserId,
+        conversation.id,
+      )
+    : [];
+
+  const ownerId = isGroup ? resolveGroupOwnerId(conversation, members) : null;
+
+  const normalizedConversation = {
     id: conversation.id,
     type: conversation.type,
+    isGroup,
+    ownerId,
     friendId: otherParticipantId || null,
     name,
-    avatar: getAvatar(otherParticipant || name),
-    avatarPhoto: getProfilePhoto(otherParticipant),
-    badges: getProfileBadges(otherParticipant),
+    avatar: isGroup ? (name.trim().charAt(0).toUpperCase() || "#") : getAvatar(otherParticipant || name),
+    avatarPhoto: isGroup
+      ? (conversation.avatarPhoto || conversation.avatarUrl || conversation.imageUrl || "")
+      : getProfilePhoto(otherParticipant),
+    badges: isGroup ? [] : getProfileBadges(otherParticipant),
     lastMessage: lastMessage
       ? getMessageSummary(lastMessage.content, lastMessage.type)
       : "Aun no hay mensajes",
@@ -553,13 +709,22 @@ async function normalizeBackendConversation(
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     lastActivityAt,
-    unread: 0,
-    online: status === "ONLINE",
+    unread: Number(conversation.unread ?? conversation.unreadCount ?? 0),
+    online: isGroup ? false : status === "ONLINE",
     rawMessages,
     participants: conversation.participants || [],
+    members: members.map((member) => ({
+      ...member,
+      role: member.role || (ownerId && String(member.id) === String(ownerId) ? "OWNER" : "MEMBER"),
+      isAdmin: ownerId ? String(member.id) === String(ownerId) : false,
+    })),
     duplicateConversationIds: [conversation.id],
     backend: true,
+    bio: isGroup ? (conversation.bio || conversation.description || "") : undefined,
+    description: isGroup ? (conversation.description || conversation.bio || "") : undefined,
   };
+
+  return applyGroupMeta(normalizedConversation);
 }
 
 async function getBackendConversations(currentProfile) {
@@ -886,10 +1051,10 @@ export const chatService = {
 
     if (!currentProfile) {
       await delay();
-      return sortByLastActivity(readState().conversations);
+      return sortByLastActivity(readState().conversations).map(applyGroupMeta);
     }
 
-    return sortByLastActivity(await getBackendConversations(currentProfile));
+    return sortByLastActivity(await getBackendConversations(currentProfile)).map(applyGroupMeta);
   },
 
   getChannels: async () => {
@@ -1022,6 +1187,112 @@ export const chatService = {
     return currentIndex >= 0 ? state.conversations[currentIndex] : conversation;
   },
 
+  editMessage: async (conversationId, messageId, content) => {
+    const republishEvent = async (updatedMessage) => {
+      const currentProfile = await ensureCurrentUserProfile().catch(() => null);
+      const currentUserId = currentProfile ? getUserId(currentProfile) : null;
+
+      if (currentUserId) {
+        publishRealtimeEvent({
+          type: "MESSAGE_EDITED",
+          conversationId: String(conversationId),
+          messageId,
+          content,
+          senderId: currentUserId,
+          senderName: currentProfile ? getDisplayName(currentProfile) : null,
+          occurredAt: new Date().toISOString(),
+        });
+      }
+
+      notifyChatUpdated();
+    };
+
+    if (isLocalConversation(conversationId)) {
+      await delay();
+
+      const id = String(conversationId);
+      const state = readState();
+
+      if (!state.messages[id]) return null;
+
+      state.messages[id] = state.messages[id].map((msg) =>
+        msg.id === messageId
+          ? { ...msg, content, edited: true, editedAt: new Date().toISOString() }
+          : msg,
+      );
+
+      writeState(state);
+      notifyChatUpdated();
+
+      return state.messages[id].find((msg) => msg.id === messageId) || null;
+    }
+
+    try {
+      const currentProfile = await ensureCurrentUserProfile();
+      const currentUserId = getUserId(currentProfile);
+      const targetConversationId = getCanonicalConversationId(conversationId);
+
+      const updatedMessage = await apiRequest(`/api/messages/${messageId}`, {
+        method: "PATCH",
+        body: { content },
+      });
+
+      const normalized = await normalizeBackendMessage(updatedMessage, currentUserId, currentProfile);
+      await republishEvent(normalized);
+      notifyChatUpdated();
+
+      return normalized;
+    } catch {
+      const id = String(conversationId);
+      const state = readState();
+
+      if (!state.messages[id]) return null;
+
+      state.messages[id] = state.messages[id].map((msg) =>
+        msg.id === messageId
+          ? { ...msg, content, edited: true, editedAt: new Date().toISOString() }
+          : msg,
+      );
+
+      writeState(state);
+      notifyChatUpdated();
+
+      return state.messages[id].find((msg) => msg.id === messageId) || null;
+    }
+  },
+
+  deleteMessage: async (conversationId, messageId) => {
+    if (isLocalConversation(conversationId)) {
+      await delay();
+
+      const id = String(conversationId);
+      const state = readState();
+
+      if (!state.messages[id]) return;
+
+      state.messages[id] = state.messages[id].filter((msg) => msg.id !== messageId);
+      writeState(state);
+      notifyChatUpdated();
+
+      return;
+    }
+
+    try {
+      await apiRequest(`/api/messages/${messageId}`, { method: "DELETE" });
+    } catch {
+      // fallback: remove locally
+      const id = String(conversationId);
+      const state = readState();
+
+      if (state.messages[id]) {
+        state.messages[id] = state.messages[id].filter((msg) => msg.id !== messageId);
+        writeState(state);
+      }
+    }
+
+    notifyChatUpdated();
+  },
+
   sendMessage: async (conversationId, content, type = "TEXT") => {
     const lastMessage = getMessageSummary(content, type);
 
@@ -1093,6 +1364,8 @@ export const chatService = {
       conversationId: targetConversationId,
       messageId: normalizedMessage.id,
       senderId: currentUserId,
+      senderName: getDisplayName(currentProfile),
+      senderAvatar: getProfilePhoto(currentProfile),
       content: normalizedMessage.content,
       messageType: normalizedMessage.type,
       occurredAt: normalizedMessage.createdAt || new Date().toISOString(),
@@ -1132,13 +1405,38 @@ export const chatService = {
   },
 
   markAsRead: async (conversationId) => {
+    const id = String(conversationId);
+
     if (!isLocalConversation(conversationId)) {
+      try {
+        const currentProfile = await ensureCurrentUserProfile();
+        const currentUserId = getUserId(currentProfile);
+
+        if (!currentUserId) {
+          return true;
+        }
+
+        const messages = await fetchConversationMessages(conversationId);
+        const unreadMessages = messages.filter(
+          (msg) => !msg.read && String(msg.senderId) !== String(currentUserId),
+        );
+
+        await Promise.allSettled(
+          unreadMessages.map((msg) =>
+            apiRequest(`/api/messages/${msg.id}/read`, {
+              method: "PATCH",
+            }).catch(() => {}),
+          ),
+        );
+      } catch {
+        // fallback: solo local
+      }
+
       return true;
     }
 
     await delay(80);
 
-    const id = String(conversationId);
     const state = readState();
 
     state.conversations = state.conversations.map((conversation) =>
@@ -1158,6 +1456,332 @@ export const chatService = {
   subscribe: (callback) => {
     window.addEventListener(CHAT_UPDATED_EVENT, callback);
     return () => window.removeEventListener(CHAT_UPDATED_EVENT, callback);
+  },
+
+  addParticipant: async (conversationId, userId) => {
+    const canonicalId = getCanonicalConversationId(conversationId);
+
+    return apiRequest(`/api/conversations/${canonicalId}/participants/${userId}`, {
+      method: "POST",
+    });
+  },
+
+  deleteConversation: async (conversationId, { isGroup = false } = {}) => {
+    const id = String(conversationId);
+
+    if (isLocalConversation(id)) {
+      await delay();
+
+      const state = readState();
+
+      state.conversations = state.conversations.filter(
+        (conversation) => conversation.id !== id,
+      );
+      delete state.messages[id];
+      writeState(state);
+      notifyChatUpdated();
+
+      return true;
+    }
+
+    const currentProfile = await ensureCurrentUserProfile();
+    const currentUserId = getUserId(currentProfile);
+
+    if (!currentUserId) {
+      throw new ApiError("No se pudo identificar al usuario actual", 0);
+    }
+
+    const canonicalId = getCanonicalConversationId(id);
+
+    try {
+      // Use leave endpoint for both groups and private chats
+      await apiRequest(
+        `/api/conversations/${canonicalId}/participants/${currentUserId}`,
+        { method: "DELETE" },
+      );
+
+      // On success (204 No Content), remove from local state
+      const state = readState();
+      state.conversations = state.conversations.filter(
+        (conversation) => conversation.id !== id,
+      );
+      delete state.messages[id];
+      writeState(state);
+      notifyChatUpdated();
+
+      return true;
+    } catch (error) {
+      // Handle errors - if conversation doesn't exist on backend, remove locally
+      if (error instanceof ApiError && error.status === 404) {
+        const state = readState();
+        const existsLocally = state.conversations.some(
+          (conversation) => conversation.id === id,
+        );
+
+        if (existsLocally) {
+          state.conversations = state.conversations.filter(
+            (conversation) => conversation.id !== id,
+          );
+          delete state.messages[id];
+          writeState(state);
+          notifyChatUpdated();
+        }
+        return true;
+      }
+
+      // For other errors, still try to remove locally if it exists
+      const state = readState();
+      const existsLocally = state.conversations.some(
+        (conversation) => conversation.id === id,
+      );
+
+      if (existsLocally) {
+        state.conversations = state.conversations.filter(
+          (conversation) => conversation.id !== id,
+        );
+        delete state.messages[id];
+        writeState(state);
+        notifyChatUpdated();
+      }
+
+      throw error;
+    }
+  },
+
+  updateConversation: async (conversationId, updates = {}) => {
+    const id = String(conversationId);
+    const normalizedUpdates = {
+      ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
+      ...(updates.bio !== undefined ? { bio: updates.bio.trim() } : {}),
+      ...(updates.description !== undefined ? { description: updates.description.trim() } : {}),
+      ...(updates.avatarPhoto !== undefined ? { avatarPhoto: updates.avatarPhoto } : {}),
+    };
+
+    if (isLocalConversation(id)) {
+      await delay();
+
+      const state = readState();
+
+      state.conversations = state.conversations.map((conversation) =>
+        conversation.id === id
+          ? {
+              ...conversation,
+              ...normalizedUpdates,
+              avatar: normalizedUpdates.name
+                ? normalizedUpdates.name.trim().charAt(0).toUpperCase()
+                : conversation.avatar,
+            }
+          : conversation,
+      );
+      writeState(state);
+      writeGroupMeta(id, normalizedUpdates);
+      notifyChatUpdated();
+
+      return applyGroupMeta(
+        state.conversations.find((conversation) => conversation.id === id) || null,
+      );
+    }
+
+    const canonicalId = getCanonicalConversationId(id);
+    const payload = {
+      ...(normalizedUpdates.name ? { name: normalizedUpdates.name } : {}),
+      ...(normalizedUpdates.bio ? { bio: normalizedUpdates.bio, description: normalizedUpdates.bio } : {}),
+      ...(normalizedUpdates.description ? { description: normalizedUpdates.description } : {}),
+      ...(normalizedUpdates.avatarPhoto ? { avatarPhoto: normalizedUpdates.avatarPhoto, avatarUrl: normalizedUpdates.avatarPhoto } : {}),
+    };
+
+    try {
+      const updatedConversation = await apiRequest(`/api/conversations/${canonicalId}`, {
+        method: "PATCH",
+        body: payload,
+      });
+
+      const currentProfile = await ensureCurrentUserProfile();
+      const normalized = await normalizeBackendConversation(
+        { ...updatedConversation, ...payload },
+        currentProfile,
+        [],
+      );
+
+      if (normalizedUpdates.avatarPhoto) {
+        normalized.avatarPhoto = normalizedUpdates.avatarPhoto;
+      }
+
+      writeGroupMeta(id, {
+        ...normalizedUpdates,
+        ownerId: normalized.ownerId,
+      });
+      notifyChatUpdated();
+
+      return applyGroupMeta(normalized);
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
+        const state = readState();
+        const existingConversation = state.conversations.find(
+          (conversation) => conversation.id === id,
+        );
+
+        if (existingConversation) {
+          const patchedConversation = {
+            ...existingConversation,
+            ...normalizedUpdates,
+          };
+
+          state.conversations = state.conversations.map((conversation) =>
+            conversation.id === id ? patchedConversation : conversation,
+          );
+          writeState(state);
+          notifyChatUpdated();
+
+          return patchedConversation;
+        }
+      }
+
+      if (normalizedUpdates.avatarPhoto || normalizedUpdates.name || normalizedUpdates.bio) {
+        writeGroupMeta(id, normalizedUpdates);
+        notifyChatUpdated();
+
+        return applyGroupMeta({
+          id,
+          isGroup: true,
+          ...normalizedUpdates,
+        });
+      }
+
+      throw error;
+    }
+  },
+
+  createGroupConversation: async ({ name, description, bio, photoFile, participantIds }) => {
+    const currentProfile = await getCurrentProfileOrNull();
+
+    let photoUrl = "";
+    if (photoFile) {
+      photoUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(photoFile);
+      });
+    }
+
+    if (!currentProfile) {
+      await delay();
+
+      const conversation = normalizeLocalConversation({
+        name,
+        description: description || "",
+        bio: bio || "",
+        avatarPhoto: photoUrl,
+        participantIds: participantIds || [],
+      });
+
+      conversation.isGroup = true;
+      conversation.type = "GROUP_CHAT";
+      conversation.bio = bio || "";
+      conversation.description = description || bio || "";
+      conversation.ownerId = "local-you";
+      conversation.members = [
+        { id: "local-you", userId: "local-you", name: "Tu", avatar: "T", online: true, role: "OWNER", isAdmin: true },
+        ...(participantIds || []).map((id) => ({
+          id,
+          name: `Usuario ${id.slice(0, 8)}`,
+          avatar: "?",
+          online: false,
+        })),
+      ];
+
+      const state = readState();
+      state.conversations = [conversation, ...state.conversations];
+      state.messages[conversation.id] = [];
+      writeState(state);
+      writeGroupMeta(conversation.id, {
+        avatarPhoto: photoUrl || "",
+        bio: bio || "",
+        description: description || bio || "",
+        ownerId: "local-you",
+      });
+      notifyChatUpdated();
+
+      return conversation;
+    }
+
+    const currentUserId = getUserId(currentProfile);
+
+    const payload = {
+      type: "GROUP_CHAT",
+      name: name.trim(),
+      description: description?.trim() || "",
+      bio: bio?.trim() || "",
+      ownerId: currentUserId,
+      participantIds: [
+        currentUserId,
+        ...(participantIds || []),
+      ],
+    };
+
+    try {
+      const conversation = await apiRequest("/api/conversations", {
+        method: "POST",
+        body: payload,
+      });
+
+      const normalized = await normalizeBackendConversation(
+        conversation,
+        currentProfile,
+        [],
+      );
+
+      if (photoUrl) {
+        normalized.avatarPhoto = photoUrl;
+      }
+      normalized.isGroup = true;
+      normalized.bio = bio?.trim() || "";
+      normalized.ownerId = currentUserId;
+
+      writeGroupMeta(normalized.id, {
+        avatarPhoto: photoUrl || "",
+        bio: bio?.trim() || "",
+        description: description?.trim() || bio?.trim() || "",
+        ownerId: currentUserId,
+      });
+
+      notifyChatUpdated();
+
+      return normalized;
+    } catch (error) {
+      if (!shouldUseBffFallback(error)) {
+        throw error;
+      }
+
+      const conversation = await apiRequest("/api/bff/chats", {
+        method: "POST",
+        body: payload,
+      });
+
+      const normalized = await normalizeBackendConversation(
+        conversation,
+        currentProfile,
+        [],
+      );
+
+      if (photoUrl) {
+        normalized.avatarPhoto = photoUrl;
+      }
+      normalized.isGroup = true;
+      normalized.bio = bio?.trim() || "";
+      normalized.ownerId = currentUserId;
+
+      writeGroupMeta(normalized.id, {
+        avatarPhoto: photoUrl || "",
+        bio: bio?.trim() || "",
+        description: description?.trim() || bio?.trim() || "",
+        ownerId: currentUserId,
+      });
+
+      notifyChatUpdated();
+
+      return normalized;
+    }
   },
 
   isConversationAlias: (conversationId, candidateConversationId) => {

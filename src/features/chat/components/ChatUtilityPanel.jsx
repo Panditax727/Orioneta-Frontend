@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, MessageSquare, Search } from "lucide-react";
 import { chatService } from "../services/chatService";
+import { resolveProfilePhoto } from "../../../services/profilePhotoService";
 
 export default function ChatUtilityPanel({ mode, onSelectConversation, style }) {
   const [query, setQuery] = useState("");
@@ -99,8 +100,14 @@ export default function ChatUtilityPanel({ mode, onSelectConversation, style }) 
               onMouseEnter={(event) => { event.currentTarget.style.background = "#161720"; }}
               onMouseLeave={(event) => { event.currentTarget.style.background = "transparent"; }}
             >
-              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
-                {conversation.avatar || conversation.name?.charAt(0) || "?"}
+              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 14, fontWeight: 600, flexShrink: 0, overflow: "hidden" }}>
+                {(() => {
+                  const photoSrc = resolveProfilePhoto(conversation.avatarPhoto);
+                  if (photoSrc) {
+                    return <img src={photoSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+                  }
+                  return conversation.avatar || conversation.name?.charAt(0) || "?";
+                })()}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ color: "#c0caf5", fontSize: 14, fontWeight: 600, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

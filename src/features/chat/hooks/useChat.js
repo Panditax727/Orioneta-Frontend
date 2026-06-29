@@ -8,6 +8,7 @@ export function useChat(conversationId) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const fetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
 
   const fetchMessages = useCallback(async ({ silent = false } = {}) => {
     if (!conversationId) return;
@@ -15,7 +16,7 @@ export function useChat(conversationId) {
     if (fetchingRef.current) {
       return;
     }
-    
+
     try {
       fetchingRef.current = true;
 
@@ -24,6 +25,7 @@ export function useChat(conversationId) {
       }
 
       const data = await chatService.getMessages(conversationId);
+      lastFetchTimeRef.current = Date.now();
       setMessages((currentMessages) => (
         areMessagesEqual(currentMessages, data) ? currentMessages : data
       ));
@@ -43,7 +45,7 @@ export function useChat(conversationId) {
 
   const sendMessage = useCallback(async (content, options = {}) => {
     if (!conversationId || !content.trim()) return;
-    
+
     try {
       setSending(true);
       setError(null);
@@ -80,6 +82,8 @@ export function useChat(conversationId) {
     }
   }, [conversationId]);
 
+  const pollTimerRef = useRef(null);
+
   useEffect(() => {
     if (!conversationId) {
       return undefined;
@@ -89,13 +93,22 @@ export function useChat(conversationId) {
       void fetchMessages();
     });
 
-    const intervalId = window.setInterval(() => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void fetchMessages({ silent: true });
       }
-    }, 3500);
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    return () => window.clearInterval(intervalId);
+    pollTimerRef.current = window.setInterval(() => {
+      void fetchMessages({ silent: true });
+    }, 15000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    };
   }, [conversationId, fetchMessages]);
 
   useEffect(() => {
@@ -108,7 +121,15 @@ export function useChat(conversationId) {
         return;
       }
 
-      void fetchMessages({ silent: true });
+      if (event.type === "MESSAGE_SENT") {
+        const newMsg = normalizeMessageFromEvent(event);
+        if (newMsg) {
+          setMessages((prev) => upsertMessages(prev, [newMsg]));
+        }
+        setTimeout(() => fetchMessages({ silent: true }), 200);
+      } else {
+        void fetchMessages({ silent: true });
+      }
     });
   }, [conversationId, fetchMessages]);
 
@@ -122,13 +143,41 @@ export function useChat(conversationId) {
   };
 }
 
+function normalizeMessageFromEvent(event) {
+  if (!event || !event.messageId) return null;
+  const createdAt = event.occurredAt ? new Date(event.occurredAt).toISOString() : new Date().toISOString();
+  return {
+    id: event.messageId,
+    conversationId: event.conversationId,
+    senderId: event.senderId,
+    sender: event.senderName || "",
+    senderInitial: (event.senderName || "?")[0]?.toUpperCase() || "?",
+    senderAvatarPhoto: event.senderAvatar || "",
+    content: event.content || "",
+    type: event.messageType || "TEXT",
+    status: "SENT",
+    mine: false,
+    edited: false,
+    createdAt,
+    time: new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    attachment: null,
+  };
+}
+
 function isMessageEventForConversation(event, conversationId) {
   if (!event?.type || !event?.conversationId) {
     return false;
   }
 
-  return event.type === "MESSAGE_SENT"
-    && chatService.isConversationAlias(conversationId, event.conversationId);
+  if (event.type !== "MESSAGE_SENT" && event.type !== "MESSAGE_EDITED") {
+    return false;
+  }
+
+  if (String(event.conversationId) === String(conversationId)) {
+    return true;
+  }
+
+  return chatService.isConversationAlias(conversationId, event.conversationId);
 }
 
 function areMessagesEqual(currentMessages, nextMessages) {
@@ -142,15 +191,23 @@ function areMessagesEqual(currentMessages, nextMessages) {
     return message.id === nextMessage.id
       && message.content === nextMessage.content
       && message.status === nextMessage.status
+      && message.edited === nextMessage.edited
       && message.senderAvatarPhoto === nextMessage.senderAvatarPhoto;
   });
 }
 
 function upsertMessages(currentMessages, nextMessages) {
+  const currentById = new Map(currentMessages.map((m) => [m.id, m]));
   const messagesById = new Map();
 
   [...currentMessages, ...nextMessages].forEach((message) => {
-    messagesById.set(message.id, message);
+    if (messagesById.has(message.id)) return;
+    const existing = currentById.get(message.id);
+    if (existing && message.mine === false && existing.mine === true) {
+      messagesById.set(message.id, { ...message, mine: true });
+    } else {
+      messagesById.set(message.id, message);
+    }
   });
 
   return [...messagesById.values()].sort((a, b) => {

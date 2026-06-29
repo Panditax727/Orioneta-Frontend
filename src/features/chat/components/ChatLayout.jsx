@@ -1,5 +1,4 @@
 import {
-  Bell,
   LogOut,
   Menu,
   MessageSquare,
@@ -8,7 +7,9 @@ import {
   Store,
   Users,
   X,
+  Palette,
 } from "lucide-react";
+import ChatDetails from "./ChatDetails";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logoImage from "../../../assets/logo.png";
@@ -23,9 +24,12 @@ import { useRealtimeConnection } from "../../realtime/hooks/useRealtimeConnectio
 import SettingsPanel from "../../settings/components/SettingsPanel";
 import FriendshipPanel from "../../status/components/FriendshipPanel";
 import { chatService } from "../services/chatService";
+import { findUserById } from "../../../services/userService";
 import ChatArea from "./ChatArea";
 import ChatUtilityPanel from "./ChatUtilityPanel";
 import Sidebar from "./Sidebar";
+import { resolveProfilePhoto } from "../../../services/profilePhotoService";
+import { NotificationBell, NotificationPanel, NotificationToast, useNotifications } from "../../notifications";
 
 export default function ChatLayout() {
   const navigate = useNavigate();
@@ -36,8 +40,20 @@ export default function ChatLayout() {
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [layoutNotice, setLayoutNotice] = useState("");
   const [session, setSession] = useState(() => getSession());
+  const chatAreaRef = useRef(null);
 
   useRealtimeConnection();
+
+  const {
+    notifications: allNotifications,
+    unreadCount,
+    loading: notifLoading,
+    error: notifError,
+    markAsRead,
+    removeNotification,
+    markAllAsRead,
+    formatTime,
+  } = useNotifications();
 
   const sessionIdentity = getSessionIdentity(session);
   const sessionIdentityRef = useRef(sessionIdentity);
@@ -53,7 +69,7 @@ export default function ChatLayout() {
 
   const userInitial = userDisplayName.trim().charAt(0).toUpperCase() || "O";
   const userProfilePhoto =
-    sessionProfile?.profilePhoto || sessionProfile?.avatarUrl || "";
+    resolveProfilePhoto(sessionProfile?.profilePhoto) || sessionProfile?.avatarUrl || "";
 
   const panelVisible = isMobile ? sidebarOpen : !leftPanelCollapsed;
 
@@ -137,12 +153,101 @@ export default function ChatLayout() {
   };
 
   const handleSelectConversation = (conversation) => {
+    if (typeof conversation === "string" || typeof conversation === "number") {
+      navigate(`/chat?conversation=${conversation}`);
+      return;
+    }
     setSelectedConversation(conversation);
     setActiveSection("chats");
 
     if (isMobile) {
       setSidebarOpen(false);
     }
+  };
+
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false);
+  const [messageSearchQuery, setMessageSearchQuery] = useState("");
+  const [sideProfile, setSideProfile] = useState(null);
+
+  const currentUserId =
+    sessionProfile?.id ||
+    sessionProfile?.userId ||
+    sessionProfile?.userID ||
+    session?.userId ||
+    null;
+
+  useEffect(() => {
+    setMessageSearchOpen(false);
+    setMessageSearchQuery("");
+    setSideProfile(null);
+  }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    if (!selectedConversation?.id) {
+      return undefined;
+    }
+
+    return chatService.subscribe(() => {
+      void chatService.getDirectMessages().then((conversations) => {
+        const refreshed = conversations.find(
+          (item) => item.id === selectedConversation.id,
+        );
+
+        if (refreshed) {
+          setSelectedConversation((current) => (
+            current?.id === refreshed.id ? { ...current, ...refreshed } : current
+          ));
+        }
+      });
+    });
+  }, [selectedConversation?.id]);
+
+  const handleToggleDetails = () => {
+    setDetailsPanelOpen((prev) => !prev);
+  };
+
+  const handleOpenMessageSearch = (query = "") => {
+    setMessageSearchOpen(true);
+    setMessageSearchQuery(query);
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedConversation?.id) {
+      return;
+    }
+
+    try {
+      await chatService.deleteConversation(selectedConversation.id, {
+        isGroup: Boolean(selectedConversation.isGroup),
+      });
+      setSelectedConversation(null);
+      setDetailsPanelOpen(false);
+      setLayoutNotice("");
+    } catch (error) {
+      setLayoutNotice(error?.message || "No se pudo eliminar la conversación");
+      window.setTimeout(() => setLayoutNotice(""), 3200);
+    }
+  };
+
+  const handleConversationUpdate = async (updates) => {
+    if (!selectedConversation?.id) {
+      return null;
+    }
+
+    const updated = await chatService.updateConversation(
+      selectedConversation.id,
+      updates,
+    );
+
+    setSelectedConversation((current) => ({
+      ...current,
+      ...updated,
+      ...(updates.avatarPhoto ? { avatarPhoto: updates.avatarPhoto, avatarUrl: updates.avatarPhoto } : {}),
+      ...(updates.name ? { avatar: updates.name.trim().charAt(0).toUpperCase() } : {}),
+    }));
+
+    return updated;
   };
 
   const handleFriendConversation = async (friendConversation) => {
@@ -161,6 +266,37 @@ export default function ChatLayout() {
       console.error("No se pudo abrir el chat con el amigo:", error);
       setLayoutNotice(error?.message || "No se pudo abrir el chat con este amigo");
       window.setTimeout(() => setLayoutNotice(""), 3200);
+    }
+  };
+
+  const handleToastNotificationClick = (notification) => {
+    if (notification.type === "MESSAGE_SENT" && notification.conversationId) {
+      navigate(`/chat?conversation=${notification.conversationId}`);
+      return;
+    }
+
+    if (notification.senderId) {
+      findUserById(notification.senderId)
+        .then((profile) => {
+          if (profile) {
+            handleFriendConversation({
+              id: profile.userId || profile.id || notification.senderId,
+              friendId: profile.userId || profile.id || notification.senderId,
+              name: profile.displayName || profile.userName || notification.senderName || "Usuario",
+              avatar: (profile.displayName || profile.userName || "?").trim().charAt(0).toUpperCase(),
+              avatarPhoto: profile.profilePhoto || profile.avatarUrl || notification.senderAvatar || "",
+              lastMessage: "",
+              time: "",
+              unread: 0,
+              online: false,
+            });
+          }
+        })
+        .catch(() => {
+          if (notification.conversationId) {
+            navigate(`/chat?conversation=${notification.conversationId}`);
+          }
+        });
     }
   };
 
@@ -195,6 +331,8 @@ export default function ChatLayout() {
           {layoutNotice}
         </div>
       )}
+
+      <NotificationToast onNotificationClick={handleToastNotificationClick} />
 
       {isMobile && (
         <button
@@ -282,21 +420,27 @@ export default function ChatLayout() {
           icon={<Search size={20} />}
         />
 
-        <NavIcon
+        <NotificationBell
+          unreadCount={unreadCount}
           active={activeSection === "notifications"}
           onClick={() => handleSectionChange("notifications")}
-          tooltip="Notificaciones"
-          icon={<Bell size={20} />}
         />
+
+        <div style={{ flex: 1 }} />
 
         <NavIcon
           active={activeSection === "neta-market"}
           onClick={() => handleSectionChange("neta-market")}
-          tooltip="Neta Market"
+          tooltip="Mercado"
           icon={<Store size={20} />}
         />
 
-        <div style={{ flex: 1 }} />
+        <NavIcon
+          active={activeSection === "studio"}
+          onClick={() => navigate("/studio")}
+          tooltip="Neta Studio"
+          icon={<Palette size={20} />}
+        />
 
         <NavIcon
           active={activeSection === "settings"}
@@ -376,17 +520,52 @@ export default function ChatLayout() {
               style={panelStyle}
             />
           ) : activeSection === "neta-market" ? (
-            <NetaMarketPanel
-              key={`neta-market-${sessionIdentity}-${selectedConversation?.id || "none"}`}
-              selectedConversation={selectedConversation}
-              style={panelStyle}
-            />
-          ) : activeSection === "search" ||
-            activeSection === "notifications" ? (
+            <div style={{ display: "flex", flexDirection: "column", ...panelStyle }}>
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2030", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: "#565f89", fontSize: 11 }}>Acceso rápido</span>
+                <button
+                  onClick={() => navigate("/market")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    background: "#7c3aed",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "white",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  Mercado completo
+                </button>
+              </div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <NetaMarketPanel
+                  key={`neta-market-${sessionIdentity}-${selectedConversation?.id || "none"}`}
+                  selectedConversation={selectedConversation}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              </div>
+            </div>
+          ) : activeSection === "search" ? (
             <ChatUtilityPanel
               key={`${activeSection}-${sessionIdentity}`}
               mode={activeSection}
               onSelectConversation={handleSelectConversation}
+              style={panelStyle}
+            />
+          ) : activeSection === "notifications" ? (
+            <NotificationPanel
+              key={`notifications-${sessionIdentity}`}
+              notifications={allNotifications}
+              unreadCount={unreadCount}
+              loading={notifLoading}
+              error={notifError}
+              onMarkAsRead={markAsRead}
+              onRemoveNotification={removeNotification}
+              onMarkAllAsRead={markAllAsRead}
+              formatTime={formatTime}
+              onNavigateToChat={handleSelectConversation}
               style={panelStyle}
             />
           ) : (
@@ -402,9 +581,20 @@ export default function ChatLayout() {
       )}
 
       <ChatArea
+        ref={chatAreaRef}
         key={`${sessionIdentity}-${selectedConversation?.id || "empty-chat"}`}
         conversation={selectedConversation}
         isMobile={isMobile}
+        detailsOpen={detailsPanelOpen}
+        onToggleDetails={handleToggleDetails}
+        messageSearchOpen={messageSearchOpen}
+        onMessageSearchOpenChange={setMessageSearchOpen}
+        messageSearchQuery={messageSearchQuery}
+        onMessageSearchQueryChange={setMessageSearchQuery}
+        sideProfile={sideProfile}
+        onOpenSideProfile={setSideProfile}
+        onCloseSideProfile={() => setSideProfile(null)}
+        onFriendConversation={handleFriendConversation}
         onBack={() => {
           if (isMobile) {
             setSelectedConversation(null);
@@ -412,6 +602,48 @@ export default function ChatLayout() {
           }
         }}
       />
+
+      {detailsPanelOpen && selectedConversation && (
+        <ChatDetails
+          conversation={selectedConversation}
+          currentUserId={currentUserId}
+          currentUserProfile={sessionProfile}
+          onClose={() => setDetailsPanelOpen(false)}
+          onCall={() => {
+            if (chatAreaRef.current?.startCall) {
+              chatAreaRef.current.startCall("audio");
+            }
+          }}
+          onVideoCall={() => {
+            if (chatAreaRef.current?.startCall) {
+              chatAreaRef.current.startCall("video");
+            }
+          }}
+          onScreenShare={() => {
+            if (chatAreaRef.current?.startCall) {
+              chatAreaRef.current.startCall("screen");
+            }
+          }}
+          onOpenMessageSearch={handleOpenMessageSearch}
+          onOpenMemberProfile={setSideProfile}
+          onMute={() => {}}
+          onPin={() => {}}
+          onAddFavorite={() => {}}
+          onDeleteConversation={handleDeleteConversation}
+          onConversationUpdate={handleConversationUpdate}
+          onMemberAdded={() => {
+            void chatService.getDirectMessages().then((conversations) => {
+              const refreshed = conversations.find(
+                (item) => item.id === selectedConversation.id,
+              );
+
+              if (refreshed) {
+                setSelectedConversation(refreshed);
+              }
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Users, X } from "lucide-react";
 import ProfileBadges from "../../status/components/ProfileBadges";
 import { useConversations } from "../hooks/useConversations";
+import { getConversationDisplayAvatar, getConversationInitial, isGroupConversation } from "./chat-area/chatUtils";
+import CreateGroupModal from "./CreateGroupModal";
 
 export default function Sidebar({
   activeSection,
@@ -14,7 +16,8 @@ export default function Sidebar({
   const [newChatName, setNewChatName] = useState("");
   const [creating, setCreating] = useState(false);
   const [creationNotice, setCreationNotice] = useState("");
-  const { conversations, loading, error, createConversation, markAsRead } = useConversations(activeSection);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const { conversations, loading, error, createConversation, createGroupConversation, markAsRead } = useConversations(activeSection);
 
   const filtered = conversations.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()),
@@ -53,6 +56,22 @@ export default function Sidebar({
     }
   };
 
+  const handleCreateGroup = async ({ name, description, bio, photoFile, participantIds }) => {
+    try {
+      const conversation = await createGroupConversation({
+        name,
+        description,
+        bio,
+        photoFile,
+        participantIds,
+      });
+      onSelectConversation(conversation);
+    } catch (err) {
+      console.error("Error al crear grupo:", err);
+      throw err;
+    }
+  };
+
   return (
     <div
       style={{
@@ -87,25 +106,48 @@ export default function Sidebar({
           >
             {activeSection === "chats" ? "Mensajes" : "Canales"}
           </h2>
-          <button
-            type="button"
-            onClick={() => setNewChatOpen((current) => !current)}
-            title={newChatOpen ? "Cerrar" : "Nuevo chat"}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: "#1a1b26",
-              border: "1px solid #1e2030",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: newChatOpen ? "#c0caf5" : "#565f89",
-            }}
-          >
-            {newChatOpen ? <X size={14} /> : <Plus size={14} />}
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            {activeSection === "chats" && (
+              <button
+                type="button"
+                onClick={() => setGroupModalOpen(true)}
+                title="Crear grupo"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: "#1a1b26",
+                  border: "1px solid #1e2030",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#565f89",
+                }}
+              >
+                <Users size={14} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setNewChatOpen((current) => !current)}
+              title={newChatOpen ? "Cerrar" : "Nuevo chat"}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                background: "#1a1b26",
+                border: "1px solid #1e2030",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: newChatOpen ? "#c0caf5" : "#565f89",
+              }}
+            >
+              {newChatOpen ? <X size={14} /> : <Plus size={14} />}
+            </button>
+          </div>
         </div>
 
         {newChatOpen && (
@@ -234,13 +276,20 @@ export default function Sidebar({
           ))
         )}
       </div>
+      <CreateGroupModal
+        isOpen={groupModalOpen}
+        onClose={() => setGroupModalOpen(false)}
+        onCreateGroup={handleCreateGroup}
+      />
     </div>
   );
 }
 
 function ConversationItem({ item, isChannel, selected, onClick }) {
   const [hovered, setHovered] = useState(false);
-  const avatarImage = item.avatarPhoto || (isImageReference(item.avatar) ? item.avatar : "");
+  const isGroup = isGroupConversation(item);
+  const avatarImage = getConversationDisplayAvatar(item);
+  const avatarInitial = getConversationInitial(item);
 
   return (
     <div
@@ -264,15 +313,15 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
           style={{
             width: 38,
             height: 38,
-            borderRadius: isChannel ? 10 : "50%",
-            background: isChannel
+            borderRadius: isChannel || isGroup ? 10 : "50%",
+            background: isChannel || isGroup
               ? "#1e2030"
               : "linear-gradient(135deg, #7c3aed, #4f46e5)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: "white",
-            fontSize: isChannel ? 16 : 14,
+            fontSize: isChannel || isGroup ? 16 : 14,
             fontWeight: 600,
             overflow: "hidden",
           }}
@@ -283,7 +332,7 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
               alt=""
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-          ) : item.avatar}
+          ) : avatarInitial}
         </div>
         {!isChannel && item.online && (
           <div
@@ -364,9 +413,4 @@ function ConversationItem({ item, isChannel, selected, onClick }) {
       )}
     </div>
   );
-}
-
-function isImageReference(value) {
-  return typeof value === "string"
-    && (/^(data:image|blob:|https?:\/\/)/i.test(value));
 }
