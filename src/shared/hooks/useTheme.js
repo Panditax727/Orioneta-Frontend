@@ -20,7 +20,7 @@ export function useTheme() {
   return context;
 }
 
-// Provider del tema (opcional, para futuro soporte de temas múltiples)
+// Provider del tema activo para la personalizacion visual.
 export function ThemeProvider({ children, customTheme }) {
   const currentTheme = customTheme || theme;
   

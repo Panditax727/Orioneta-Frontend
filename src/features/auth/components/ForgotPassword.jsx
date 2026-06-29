@@ -22,7 +22,7 @@ export default function ForgotPassword() {
       setTimeout(() => navigate("/verify-code", { state: { email } }), 2000);
     } catch (err) {
       setError(
-        err.response?.data?.message ||
+        err.message ||
           "Ocurrió un error al enviar el código. Por favor, intenta nuevamente."
       );
     } finally {

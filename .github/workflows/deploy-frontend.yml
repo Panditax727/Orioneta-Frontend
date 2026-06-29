@@ -8,7 +8,8 @@ on:
 
 env:
   IMAGE_NAME: orioneta-frontend
-  CONTAINER_NAME: orioneta-frontend
+  CONTAINER_NAME: orioneta-public-frontend
+  CADDY_CONTAINER_NAME: orioneta-public-caddy
 
 jobs:
   build-and-push:
@@ -35,6 +36,7 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=
             VITE_REALTIME_BASE_URL=
+            VITE_BUILD_ID=${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -102,11 +104,12 @@ jobs:
               --network orioneta-public \
               "$IMAGE"
 
-            sudo docker rm -f orioneta-caddy || true
+            sudo docker rm -f "${{ env.CADDY_CONTAINER_NAME }}" || true
             sudo docker run -d \
-              --name orioneta-caddy \
+              --name "${{ env.CADDY_CONTAINER_NAME }}" \
               --restart unless-stopped \
               --network orioneta-public \
+              --add-host host.docker.internal:host-gateway \
               -p 80:80 \
               -p 443:443 \
               -p 443:443/udp \
@@ -117,7 +120,7 @@ jobs:
               -v /opt/orioneta/caddy-config:/config \
               caddy:2-alpine
 
-            sudo docker exec orioneta-caddy caddy validate --config /etc/caddy/Caddyfile
+            sudo docker exec "${{ env.CADDY_CONTAINER_NAME }}" caddy validate --config /etc/caddy/Caddyfile
             sudo docker exec "${{ env.CONTAINER_NAME }}" wget -qO- http://localhost/health
             sudo docker image prune -f
 

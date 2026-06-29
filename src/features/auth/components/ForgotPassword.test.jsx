@@ -72,7 +72,7 @@ describe('ForgotPassword', () => {
     await user.click(screen.getByText('Enviar Código de Verificación'));
 
     await waitFor(() => {
-      expect(screen.getByText(/ocurri.*error/i)).toBeInTheDocument();
+      expect(screen.getByText('Correo no encontrado')).toBeInTheDocument();
     });
   });
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -214,6 +215,19 @@ function ProfileSection({ settings, onSave, onSuccess, onError }) {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+=======
+import { ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { clearSession } from "../../auth/session";
+import SettingsPanel from "./SettingsPanel";
+
+export default function SettingsPage() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    clearSession();
+    navigate("/login", { replace: true });
+>>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
   };
 
   const handleSubmit = async () => {
@@ -226,6 +240,7 @@ function ProfileSection({ settings, onSave, onSuccess, onError }) {
   };
 
   return (
+<<<<<<< HEAD
     <div>
       <h1 style={{ color: "#c0caf5", fontSize: 24, fontWeight: 600, margin: "0 0 8px 0" }}>Perfil</h1>
       <p style={{ color: "#565f89", fontSize: 14, margin: "0 0 32px 0" }}>Personaliza tu perfil público</p>
@@ -710,5 +725,62 @@ function SelectSetting({ label, value, options, onChange }) {
         ))}
       </select>
     </div>
+=======
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#0d0e14",
+        color: "#c0caf5",
+        padding: 24,
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1040,
+          height: "calc(100vh - 48px)",
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => navigate("/chat")}
+          style={{
+            width: "fit-content",
+            height: 36,
+            borderRadius: 8,
+            border: "1px solid #1e2030",
+            background: "#13141c",
+            color: "#c0caf5",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "0 12px",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 800,
+          }}
+        >
+          <ArrowLeft size={15} />
+          Volver al chat
+        </button>
+
+        <SettingsPanel
+          onLogout={handleLogout}
+          style={{
+            width: "100%",
+            minHeight: 0,
+            flex: 1,
+            border: "1px solid #1e2030",
+            borderRadius: 10,
+            overflow: "hidden",
+          }}
+        />
+      </div>
+    </main>
+>>>>>>> 68cdf069ac4832ccdd7fdbd5f4749b10018f715f
   );
 }

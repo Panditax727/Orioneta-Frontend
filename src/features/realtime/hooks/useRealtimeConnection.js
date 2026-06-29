@@ -195,3 +195,5 @@ function flushPendingOutgoingEvents(socket, pendingOutgoingEventsRef) {
     socket.send(JSON.stringify(event));
   });
 }
+
+export const REALTIME_STATUS_EVENT = "realtime:status";

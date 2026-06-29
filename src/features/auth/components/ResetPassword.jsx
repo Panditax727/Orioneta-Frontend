@@ -53,7 +53,7 @@ export default function ResetPassword() {
       setMessage(response.message || "Contraseña actualizada correctamente");
       setTimeout(() => navigate("/login"), 2500);
     } catch (err) {
-      setError(err.response?.data?.message || "Error al actualizar la contraseña. Por favor, intenta nuevamente.");
+      setError(err.message || "Error al actualizar la contraseña. Por favor, intenta nuevamente.");
     } finally {
       setLoading(false);
     }
