@@ -1,3 +1,4 @@
+import { apiRequest } from "../../../services/apiClient";
 import {
   acceptFriendRequest,
   cancelFriendRequest,
@@ -180,5 +181,13 @@ export const statusService = {
   removeFriend: async (friendId) => {
     const profile = await ensureCurrentUserProfile();
     return removeFriend(profile.userID, friendId);
+  },
+
+  getActiveConnections: async () => {
+    return apiRequest("/api/realtime/presence");
+  },
+
+  getUserPresence: async (userId) => {
+    return apiRequest(`/api/realtime/presence/${userId}`);
   },
 };

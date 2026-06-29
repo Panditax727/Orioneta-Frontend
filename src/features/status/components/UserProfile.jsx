@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Settings, LogOut, Edit2, Check, X } from "lucide-react";
 import ProfileBadges from "./ProfileBadges";
+import { resolveProfilePhoto } from "../../../services/profilePhotoService";
 
 const STATUS_OPTIONS = [
   { value: "online", label: "En línea", color: "#22c55e" },
@@ -56,13 +57,13 @@ export default function UserProfile({ profile, onUpdateStatus, onOpenSettings })
             flexShrink: 0,
           }}
         >
-          {profile.profilePhoto ? (
-            <img
-              src={profile.profilePhoto}
-              alt=""
-              style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
-            />
-          ) : profile.avatar}
+          {(() => {
+            const photoSrc = resolveProfilePhoto(profile.profilePhoto);
+            if (photoSrc) {
+              return <img src={photoSrc} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />;
+            }
+            return profile.avatar;
+          })()}
         </div>
 
         {/* Info */}

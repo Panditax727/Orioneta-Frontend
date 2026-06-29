@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, MessageCircle, MoreVertical, Search, Trash2 } from "lucide-react";
 import { copyToClipboard } from "../../../shared/utils/helpers";
+import { resolveProfilePhoto } from "../../../services/profilePhotoService";
 
 const STATUS_COLORS = {
   online: "#22c55e",
@@ -194,13 +195,13 @@ function FriendItem({ friend, onClick, onCopy, onRemove }) {
             fontWeight: 600,
           }}
         >
-          {friend.profilePhoto ? (
-            <img
-              src={friend.profilePhoto}
-              alt=""
-              style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
-            />
-          ) : friend.avatar}
+          {(() => {
+            const photoSrc = resolveProfilePhoto(friend.profilePhoto);
+            if (photoSrc) {
+              return <img src={photoSrc} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />;
+            }
+            return friend.avatar;
+          })()}
         </div>
         {friend.status !== "offline" && (
           <div

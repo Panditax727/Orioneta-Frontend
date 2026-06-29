@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { statusService } from "../services/statusService";
+import { subscribeRealtimeEvents } from "../../realtime/services/realtimeService";
 
 export function usePresence() {
   const [friends, setFriends] = useState([]);
@@ -7,8 +8,8 @@ export function usePresence() {
   const [requests, setRequests] = useState({ received: [], sent: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const friendsRef = useRef([]);
 
-  // Cargar amigos y perfil
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -19,6 +20,7 @@ export function usePresence() {
         statusService.getFriendRequests(),
       ]);
       setFriends(friendsData);
+      friendsRef.current = friendsData;
       setUserProfile(profileData);
       setRequests(requestsData);
     } catch (err) {
@@ -28,7 +30,6 @@ export function usePresence() {
     }
   }, []);
 
-  // Actualizar estado del usuario
   const updateStatus = useCallback(async (status, activity) => {
     try {
       setError(null);
@@ -101,7 +102,6 @@ export function usePresence() {
     }
   }, [fetchData]);
 
-  // Buscar amigos
   const searchFriends = useCallback(async (query) => {
     try {
       const results = await statusService.searchFriends(query);
@@ -112,7 +112,6 @@ export function usePresence() {
     }
   }, []);
 
-  // Obtener amigos por estado
   const getFriendsByStatus = useCallback(async (status) => {
     try {
       const results = await statusService.getFriendsByStatus(status);
@@ -123,12 +122,52 @@ export function usePresence() {
     }
   }, []);
 
-  // Cargar datos al montar
   useEffect(() => {
     queueMicrotask(() => {
       void fetchData();
     });
   }, [fetchData]);
+
+  const userProfileRef = useRef(userProfile);
+  userProfileRef.current = userProfile;
+
+  useEffect(() => {
+    return subscribeRealtimeEvents((event) => {
+      if (event.type === "USER_CONNECTED") {
+        setFriends((prev) =>
+          prev.map((f) =>
+            String(f.id) === String(event.userId)
+              ? { ...f, online: true, lastSeen: null }
+              : f,
+          ),
+        );
+      }
+
+      if (event.type === "USER_DISCONNECTED") {
+        setFriends((prev) =>
+          prev.map((f) =>
+            String(f.id) === String(event.userId)
+              ? { ...f, online: false, lastSeen: event.occurredAt || new Date().toISOString() }
+              : f,
+          ),
+        );
+      }
+
+      if (event.type === "USER_STATUS_CHANGED") {
+        setFriends((prev) =>
+          prev.map((f) =>
+            String(f.id) === String(event.userId)
+              ? { ...f, profilePhoto: event.newValue || f.profilePhoto, lastSeen: event.occurredAt || f.lastSeen }
+              : f,
+          ),
+        );
+        const currentProfile = userProfileRef.current;
+        if (currentProfile && String(currentProfile.id) === String(event.userId)) {
+          setUserProfile((prev) => prev ? { ...prev, profilePhoto: event.newValue || prev.profilePhoto } : prev);
+        }
+      }
+    });
+  }, []);
 
   return {
     friends,
