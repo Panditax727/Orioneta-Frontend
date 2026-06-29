@@ -94,6 +94,10 @@ function writeBetaPrivacyPrefs(userId = "anonymous", prefs) {
   );
 }
 
+function getProfileId(profile) {
+  return profile?.userID || profile?.id || profile?.profileUserId || "";
+}
+
 export default function SettingsPanel({ selectedConversation, style, onLogout }) {
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile] = useState(null);
@@ -170,8 +174,14 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
   const handleProfilePhotoFile = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
+    const profileId = getProfileId(profile);
 
-    if (!file || !profile?.userID) {
+    if (!file) {
+      return;
+    }
+
+    if (!profileId) {
+      setError("No se pudo identificar tu perfil para subir la foto. Cierra sesion e ingresa nuevamente.");
       return;
     }
 
@@ -180,7 +190,7 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
       setNotice("");
 
       setUploadingPhoto(true);
-      const storedPhoto = await uploadProfilePhoto(profile.userID, file);
+      const storedPhoto = await uploadProfilePhoto(profileId, file);
 
       setForm((current) => {
         removeLocalProfilePhoto(current.profilePhoto);
@@ -191,7 +201,16 @@ export default function SettingsPanel({ selectedConversation, style, onLogout })
           profilePhotoPreview: storedPhoto.previewUrl,
         };
       });
-      setNotice("Foto subida. Guarda el perfil para publicarla");
+
+      const nextProfile = await statusService.updateUserProfile({
+        displayName: form.displayName.trim(),
+        bio: form.bio,
+        profilePhotoReference: storedPhoto.reference,
+      });
+
+      setProfile(nextProfile);
+      setForm(buildForm(nextProfile));
+      setNotice("Foto de perfil actualizada");
     } catch (photoError) {
       setError(photoError.message || "No se pudo subir la imagen");
     } finally {
@@ -431,6 +450,8 @@ function SectionButton({ section, active, onClick }) {
 }
 
 function ProfileSection({ avatar, form, loading, saving, uploadingPhoto, dirty, updateField, onFileChange, onRemovePhoto, onSave }) {
+  const disabled = loading || saving || uploadingPhoto;
+
   return (
     <form onSubmit={onSave}>
       <SectionHeader title="Perfil" subtitle="Tu identidad publica dentro de Orioneta." />
@@ -440,13 +461,13 @@ function ProfileSection({ avatar, form, loading, saving, uploadingPhoto, dirty, 
           {avatar}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <label style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#c0caf5", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 12px", fontSize: 12, fontWeight: 700, cursor: loading || saving ? "not-allowed" : "pointer", opacity: loading || saving ? 0.6 : 1 }}>
+          <label style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: "#c0caf5", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 12px", fontSize: 12, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1 }}>
             <ImagePlus size={15} />
-            {uploadingPhoto ? "Subiendo..." : "Elegir imagen"}
+            {uploadingPhoto ? "Subiendo y guardando..." : "Elegir imagen"}
             <input
               type="file"
-              accept="image/*"
-              disabled={loading || saving}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              disabled={disabled}
               onChange={onFileChange}
               style={{ display: "none" }}
             />
@@ -455,9 +476,9 @@ function ProfileSection({ avatar, form, loading, saving, uploadingPhoto, dirty, 
           <button
             type="button"
             onClick={onRemovePhoto}
-            disabled={loading || saving || !form.profilePhoto}
+            disabled={disabled || !form.profilePhoto}
             title="Quitar foto"
-            style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: form.profilePhoto ? "#ef4444" : "#565f89", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 12px", cursor: form.profilePhoto ? "pointer" : "default", opacity: loading || saving ? 0.6 : 1, fontSize: 12, fontWeight: 700 }}
+            style={{ height: 36, borderRadius: 8, border: "1px solid #1e2030", background: "#1a1b26", color: form.profilePhoto ? "#ef4444" : "#565f89", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 12px", cursor: form.profilePhoto && !disabled ? "pointer" : "default", opacity: disabled ? 0.6 : 1, fontSize: 12, fontWeight: 700 }}
           >
             <Trash2 size={15} />
             Quitar

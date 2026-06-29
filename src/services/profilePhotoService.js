@@ -5,6 +5,12 @@ const PROFILE_PHOTO_STORAGE_KEY = "orioneta.profile-photo";
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const MAX_DIMENSION = 512;
 const JPEG_QUALITY = 0.82;
+const SUPPORTED_PROFILE_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 export function isLocalProfilePhoto(reference) {
   return typeof reference === "string" && reference.startsWith(LOCAL_PROFILE_PHOTO_PREFIX);
@@ -74,6 +80,10 @@ function validateProfilePhoto(file) {
 
   if (!file.type.startsWith("image/")) {
     throw new Error("El archivo debe ser una imagen");
+  }
+
+  if (!SUPPORTED_PROFILE_PHOTO_TYPES.has(file.type)) {
+    throw new Error("Usa una imagen JPG, PNG, WEBP o GIF para la foto de perfil");
   }
 
   if (file.size > MAX_FILE_SIZE) {
