@@ -197,6 +197,15 @@ export default function LoginPage() {
           }
         />
 
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Link to="/forgot-password" style={{ color: "#9aa5ce", fontSize: 13, textDecoration: "none" }}
+            onMouseEnter={(e) => e.currentTarget.style.color = "#b599ff"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "#9aa5ce"}
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
+
         <Button fullWidth type="submit" disabled={loading}>
           {loading ? (
             <>
